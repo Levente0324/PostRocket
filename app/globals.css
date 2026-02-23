@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --color-obsidian: #0d0d12;
+  --color-champagne: #c9a84c;
+  --color-slate: #2a2a35;
+  --color-ivory: #faf8f5;
+
+  --font-sans: var(--font-inter);
+  --font-serif: var(--font-playfair);
+  --font-mono: var(--font-jetbrains);
+}
+
+@layer base {
+  body {
+    @apply bg-obsidian text-ivory font-sans antialiased selection:bg-champagne selection:text-obsidian;
+  }
+}
+
+/* Custom Utilities */
+@layer utilities {
+  .glass-panel {
+    @apply bg-slate/40 backdrop-blur-xl border border-white/5 shadow-2xl;
+  }
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-ivory to-champagne;
+  }
+}

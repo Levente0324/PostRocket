@@ -1,27 +1,58 @@
 import type { Metadata } from "next";
-import { Inter, Playfair_Display, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 
-const inter = Inter({
-  subsets: ["latin"],
-  variable: "--font-inter",
-});
-
-const playfair = Playfair_Display({
-  subsets: ["latin"],
-  style: ["italic", "normal"],
-  variable: "--font-playfair",
-});
-
-const jetbrains = JetBrains_Mono({
-  subsets: ["latin"],
-  variable: "--font-jetbrains",
-});
-
 export const metadata: Metadata = {
-  title: "PostPilot | AI Social Media Automation",
+  metadataBase: new URL("https://postrocket.app"),
+  title: {
+    default:
+      "PostRocket | Automatizált social media posztolás az AI segítségével",
+    template: "%s | PostRocket",
+  },
   description:
-    "Your AI social media manager. Connect, generate, and schedule posts with ease.",
+    "A PostRocket automatikusan készíti és ütemezi az Instagram és Facebook posztjaidat. Több kliens, kevesebb munka — magyar vállalkozásoknak.",
+  keywords: [
+    "social media kezelés",
+    "ai poszt generálás",
+    "instagram ütemező",
+    "facebook automata poszt",
+    "magyar kkv marketing",
+  ],
+  authors: [{ name: "PostRocket" }],
+  openGraph: {
+    type: "website",
+    locale: "hu_HU",
+    url: "https://postrocket.app",
+    title: "PostRocket | Automatizált social media posztolás",
+    description:
+      "A PostRocket automatikusan készíti és ütemezi az Instagram és Facebook posztjaidat. Több kliens, kevesebb munka.",
+    siteName: "PostRocket",
+    images: [
+      {
+        url: "/og-image.jpg",
+        width: 1200,
+        height: 630,
+        alt: "PostRocket Dashboard Preview",
+      },
+    ],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PostRocket | Automatizált social media posztolás",
+    description:
+      "AI-vezérelt posztgenerálás és ütemezés magyar vállalkozásoknak. Spórolj heti 10 órát!",
+    images: ["/og-image.jpg"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
 };
 
 export default function RootLayout({
@@ -30,16 +61,24 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html
-      lang="en"
-      className={`${inter.variable} ${playfair.variable} ${jetbrains.variable}`}
-    >
-      <body
-        className="bg-obsidian text-ivory min-h-screen flex flex-col"
-        suppressHydrationWarning
-      >
-        {children}
-      </body>
+    <html lang="hu">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link
+          rel="preconnect"
+          href="https://fonts.gstatic.com"
+          crossOrigin="anonymous"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,600;0,700;1,300;1,400;1,600;1,700&family=Outfit:wght@200;300;400;500;600&family=IBM+Plex+Mono:wght@300;400;500;600&display=swap"
+          rel="stylesheet"
+        />
+        <link
+          href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap"
+          rel="stylesheet"
+        />
+      </head>
+      <body>{children}</body>
     </html>
   );
 }

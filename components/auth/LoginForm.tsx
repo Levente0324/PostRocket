@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
-import { Button } from "@/components/ui/button";
 import { Loader2 } from "lucide-react";
 
 export function LoginForm() {
@@ -11,107 +10,157 @@ export function LoginForm() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [isSignUp, setIsSignUp] = useState(false);
+  const [signUpMode, setSignUpMode] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
   const router = useRouter();
-  const supabase = createClient();
 
-  const handleAuth = async (e: React.FormEvent) => {
-    e.preventDefault();
+  // NOTE: Removed auto-signOut on mount — it was a dev-only hack that
+  // would destroy active sessions if a logged-in user ever hit /login
+  // before the middleware redirect took effect.
+
+  const handleAuth = async (event: React.FormEvent) => {
+    event.preventDefault();
     setLoading(true);
     setError(null);
+    setSuccess(null);
 
     try {
-      if (isSignUp) {
-        const { data, error } = await supabase.auth.signUp({
+      const supabase = createClient();
+      if (signUpMode) {
+        const { data, error: signUpError } = await supabase.auth.signUp({
           email,
           password,
           options: {
             emailRedirectTo: `${window.location.origin}/auth/callback`,
           },
         });
-        if (error) throw error;
+
+        if (signUpError) throw signUpError;
 
         if (data.session) {
-          router.push("/dashboard");
-          router.refresh();
+          window.location.href = "/dashboard/posts";
         } else {
-          setError("Check your email for the confirmation link.");
+          setSuccess(
+            "Ellenőrizd az e-mail fiókodat, és erősítsd meg a regisztrációt.",
+          );
         }
       } else {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password,
         });
-        if (error) throw error;
-        router.push("/dashboard");
-        router.refresh();
+
+        if (signInError) throw signInError;
+
+        window.location.href = "/dashboard/posts";
       }
-    } catch (err: any) {
-      setError(err.message);
+    } catch (authError: any) {
+      setError(
+        authError.message ||
+          "Sikertelen hitelesítés. Ellenőrizd az e-mail és jelszó párost.",
+      );
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleAuth} className="space-y-6">
+    <form onSubmit={handleAuth} className="space-y-5">
+      <div className="mb-6">
+        <h2 className="text-2xl font-extrabold tracking-tight text-[#1A1A1A]">
+          {signUpMode ? "Fiók létrehozása" : "Bejelentkezés"}
+        </h2>
+        <p className="mt-1 text-sm text-[#4a4a4a]">
+          {signUpMode
+            ? "Hozz létre ingyenes fiókot — 3 poszt mindig elérhető."
+            : "Üdvözlünk vissza! Add meg az adataid."}
+        </p>
+      </div>
+
       {error && (
-        <div className="p-3 text-sm text-red-400 bg-red-400/10 border border-red-400/20 rounded-xl">
+        <div className="rounded-xl border border-red-200 bg-red-50/80 px-4 py-3 text-sm text-red-700">
           {error}
         </div>
       )}
 
-      <div className="space-y-2">
-        <label className="text-xs font-mono uppercase tracking-widest text-ivory/60">
-          Email Address
+      {success && (
+        <div className="rounded-xl border border-[#2E4036]/20 bg-[#2E4036]/08 px-4 py-3 text-sm text-[#2E4036]">
+          {success}
+        </div>
+      )}
+
+      <div className="space-y-1.5">
+        <label
+          htmlFor="auth-email"
+          className="block text-sm font-semibold text-[#1A1A1A]"
+        >
+          E-mail cím
         </label>
         <input
+          id="auth-email"
           type="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
-          className="w-full bg-obsidian/50 border border-white/10 rounded-xl px-4 py-3 text-ivory placeholder:text-ivory/30 focus:outline-none focus:border-champagne/50 focus:ring-1 focus:ring-champagne/50 transition-all"
-          placeholder="commander@postpilot.ai"
+          placeholder="te@vallalkozas.hu"
+          className="input-organic"
         />
       </div>
 
-      <div className="space-y-2">
-        <label className="text-xs font-mono uppercase tracking-widest text-ivory/60">
-          Password
+      <div className="space-y-1.5">
+        <label
+          htmlFor="auth-password"
+          className="block text-sm font-semibold text-[#1A1A1A]"
+        >
+          Jelszó
         </label>
         <input
+          id="auth-password"
           type="password"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
-          className="w-full bg-obsidian/50 border border-white/10 rounded-xl px-4 py-3 text-ivory placeholder:text-ivory/30 focus:outline-none focus:border-champagne/50 focus:ring-1 focus:ring-champagne/50 transition-all"
-          placeholder="••••••••"
+          minLength={8}
+          placeholder="Legalább 8 karakter"
+          className="input-organic"
         />
+        {signUpMode && (
+          <p className="text-xs text-[#4a4a4a]">
+            Minimum 8 karakter szükséges.
+          </p>
+        )}
       </div>
 
-      <Button
+      <button
         type="submit"
-        className="w-full h-12 rounded-xl text-base font-medium mt-4"
         disabled={loading}
+        className="btn-clay w-full py-3.5 text-base disabled:opacity-60"
       >
         {loading ? (
-          <Loader2 className="w-5 h-5 animate-spin" />
-        ) : isSignUp ? (
-          "Initialize Account"
+          <span className="flex items-center justify-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Kérlek várj...
+          </span>
+        ) : signUpMode ? (
+          "Fiók létrehozása"
         ) : (
-          "Access Dashboard"
+          "Bejelentkezés"
         )}
-      </Button>
+      </button>
 
-      <div className="text-center mt-6">
-        <button
-          type="button"
-          onClick={() => setIsSignUp(!isSignUp)}
-          className="text-sm text-ivory/60 hover:text-champagne transition-colors"
-        >
-          {isSignUp ? "Already have access? Login" : "Need an account? Sign up"}
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={() => {
+          setSignUpMode((prev) => !prev);
+          setError(null);
+          setSuccess(null);
+        }}
+        className="w-full text-center text-sm text-[#4a4a4a] transition hover:text-[#2E4036]"
+      >
+        {signUpMode
+          ? "Van már fiókod? Jelentkezz be"
+          : "Nincs még fiókod? Regisztrálj ingyen"}
+      </button>
     </form>
   );
 }

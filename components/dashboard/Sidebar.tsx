@@ -1,92 +1,136 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { motion } from "motion/react";
-import {
-  LayoutDashboard,
-  Calendar,
-  FileText,
-  Users,
-  Settings,
-  CreditCard,
-  LogOut,
-} from "lucide-react";
+import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/browser";
-import { useRouter } from "next/navigation";
 
-const navItems = [
-  { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Posts", href: "/dashboard/posts", icon: FileText },
-  { name: "Calendar", href: "/dashboard/calendar", icon: Calendar },
-  { name: "Accounts", href: "/dashboard/accounts", icon: Users },
-  { name: "Billing", href: "/dashboard/billing", icon: CreditCard },
-  { name: "Settings", href: "/dashboard/settings", icon: Settings },
-];
+type Props = {
+  planLabel: string;
+  isPro: boolean;
+  isElite?: boolean;
+  userEmail: string;
+};
 
-export function Sidebar() {
+export function Sidebar({ planLabel, isPro, isElite, userEmail }: Props) {
   const pathname = usePathname();
   const router = useRouter();
-  const supabase = createClient();
 
   const handleLogout = async () => {
+    const supabase = createClient();
     await supabase.auth.signOut();
-    router.push("/login");
+    router.push("/");
     router.refresh();
   };
 
+  const isPaid = isPro || isElite;
+
+  const getNavClass = (href: string) => {
+    const active = pathname === href || pathname.startsWith(href + "/");
+    return `group flex items-center gap-3 px-3 py-2.5 rounded transition-all ${
+      active
+        ? "bg-light-moss-highlight text-white font-medium"
+        : "text-gray-400 hover:text-white hover:bg-white/5"
+    }`;
+  };
+
+  const getIconClass = (href: string) => {
+    return `material-symbols-outlined text-[22px] transition-colors`;
+  };
+
   return (
-    <aside className="w-64 hidden md:flex flex-col border-r border-white/5 bg-slate/20 backdrop-blur-xl h-screen sticky top-0">
-      <div className="p-6">
-        <Link href="/dashboard" className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-champagne to-yellow-600 flex items-center justify-center">
-            <span className="font-serif italic font-bold text-obsidian text-lg">
-              P
+    <aside className="bg-light-surface-dark flex w-full flex-col justify-between text-gray-400 h-full relative z-10 md:w-64 border-r border-white/5">
+      <div>
+        {/* Logo */}
+        <div className="h-20 flex items-center px-6 border-b border-white/5 mb-4">
+          <Link
+            href="/"
+            className="flex items-center gap-3 transition-transform hover:scale-105"
+          >
+            <div className="w-8 h-8 rounded bg-light-primary flex items-center justify-center text-white">
+              <span className="material-symbols-outlined text-white text-[20px]">
+                rocket_launch
+              </span>
+            </div>
+            <span className="font-display italic text-2xl font-bold tracking-tight text-white/90">
+              PostRocket
             </span>
-          </div>
-          <span className="font-bold text-xl tracking-tight">PostPilot</span>
-        </Link>
+          </Link>
+        </div>
+
+        {/* Navigáció */}
+        <div className="px-3">
+          <nav className="flex flex-col gap-1">
+            <Link
+              href="/dashboard/posts"
+              className={getNavClass("/dashboard/posts")}
+            >
+              <span className={getIconClass("/dashboard/posts")}>
+                calendar_month
+              </span>
+              <span className="font-medium text-sm">Ütemező Naptár</span>
+            </Link>
+            <Link
+              href="/dashboard/ai-options"
+              className={getNavClass("/dashboard/ai-options")}
+            >
+              <span className={getIconClass("/dashboard/ai-options")}>
+                auto_awesome
+              </span>
+              <span className="font-medium text-sm">AI Opciók</span>
+            </Link>
+            <Link
+              href="/dashboard/insights"
+              className={getNavClass("/dashboard/insights")}
+            >
+              <span className={getIconClass("/dashboard/insights")}>
+                insights
+              </span>
+              <span className="font-medium text-sm">Insights</span>
+            </Link>
+
+            <div className="my-4 border-t border-white/5 mx-2"></div>
+
+            <Link
+              href="/dashboard/account-billing"
+              className={getNavClass("/dashboard/account-billing")}
+            >
+              <span className={getIconClass("/dashboard/account-billing")}>
+                settings
+              </span>
+              <span className="font-medium text-sm">Beállítások</span>
+            </Link>
+          </nav>
+        </div>
       </div>
 
-      <nav className="flex-1 px-4 space-y-2 mt-8">
-        {navItems.map((item) => {
-          const isActive = pathname === item.href;
-          return (
-            <Link
-              key={item.name}
-              href={item.href}
-              className={`flex items-center gap-3 px-4 py-3 rounded-xl transition-all relative group ${
-                isActive
-                  ? "text-champagne bg-white/5"
-                  : "text-ivory/60 hover:text-ivory hover:bg-white/5"
-              }`}
+      <div className="mt-auto">
+        {/* User Block */}
+        <div className="p-4 border-t border-white/5 bg-black/20 flex flex-col gap-2">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded bg-[#0F1612] border border-white/10 flex items-center justify-center shrink-0">
+              <span className="material-symbols-outlined text-white/60 text-[20px]">
+                person
+              </span>
+            </div>
+            <div className="overflow-hidden flex-1">
+              <p className="text-sm font-bold text-white tracking-widest uppercase truncate pb-0.5">
+                {userEmail.split("@")[0]}
+              </p>
+              <p className="text-[10px] text-light-moss-highlight font-bold uppercase">
+                {planLabel}
+              </p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="text-white/40 hover:text-red-500 transition-colors"
+              title="Kijelentkezés"
             >
-              {isActive && (
-                <motion.div
-                  layoutId="sidebar-active"
-                  className="absolute left-0 w-1 h-6 bg-champagne rounded-r-full"
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  exit={{ opacity: 0 }}
-                />
-              )}
-              <item.icon
-                className={`w-5 h-5 ${isActive ? "text-champagne" : "group-hover:text-ivory"}`}
-              />
-              <span className="font-medium text-sm">{item.name}</span>
-            </Link>
-          );
-        })}
-      </nav>
-
-      <div className="p-4 mt-auto">
-        <button
-          onClick={handleLogout}
-          className="flex items-center gap-3 px-4 py-3 rounded-xl w-full text-left text-ivory/60 hover:text-red-400 hover:bg-red-400/10 transition-all"
-        >
-          <LogOut className="w-5 h-5" />
-          <span className="font-medium text-sm">Sign Out</span>
-        </button>
+              <span className="material-symbols-outlined text-[20px]">
+                logout
+              </span>
+            </button>
+          </div>
+        </div>
       </div>
     </aside>
   );

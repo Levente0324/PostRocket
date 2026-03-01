@@ -1,19 +1,14 @@
+import { PostScheduler } from "@/components/dashboard/PostScheduler";
 import { createClient } from "@/lib/supabase/server";
+import { getPostLimit } from "@/lib/subscription";
 import { redirect } from "next/navigation";
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import {
-  Plus,
-  Image as ImageIcon,
-  Calendar,
-  MoreVertical,
-  Edit2,
-  Trash2,
-} from "lucide-react";
-import { format } from "date-fns";
+import { HeaderNewPostButton } from "@/components/dashboard/HeaderNewPostButton";
+import { PostDashboardProvider } from "@/components/dashboard/PostDashboardContext";
+import { PostsDashboardClient } from "@/components/dashboard/PostsDashboardClient";
 
 export default async function PostsPage() {
   const supabase = await createClient();
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -22,104 +17,145 @@ export default async function PostsPage() {
     redirect("/login");
   }
 
-  const { data: posts } = await supabase
-    .from("posts")
-    .select("*, scheduled_posts(*)")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false });
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("plan, subscription_status")
+    .eq("id", user.id)
+    .single();
+
+  const { data: scheduledRows } = await supabase
+    .from("scheduled_posts")
+    .select(
+      "id, platform, scheduled_for, status, posts!inner(user_id, caption, image_url)",
+    )
+    .eq("posts.user_id", user.id)
+    .eq("status", "scheduled")
+    .order("scheduled_for", { ascending: true });
+
+  const { data: connectedRows } = await supabase
+    .from("social_accounts")
+    .select("provider, expires_at")
+    .eq("user_id", user.id);
+
+  // Check if any connected account has an expired or expiring-soon token
+  const currentTime = new Date();
+  const expiringAccount = (connectedRows ?? []).find((row) => {
+    if (!row.expires_at) return false;
+    return new Date(row.expires_at) <= currentTime;
+  });
+  const soonExpiringAccount = !expiringAccount
+    ? (connectedRows ?? []).find((row) => {
+        if (!row.expires_at) return false;
+        const expiry = new Date(row.expires_at);
+        const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+        return (
+          expiry > currentTime &&
+          expiry.getTime() - currentTime.getTime() <= sevenDaysMs
+        );
+      })
+    : null;
+
+  const scheduledPosts = (scheduledRows ?? []).map((row) => ({
+    id: row.id,
+    platform: row.platform,
+    scheduled_for: row.scheduled_for,
+    caption: (row.posts as any).caption,
+    image_url: (row.posts as any).image_url,
+  })) as {
+    id: string;
+    platform: "facebook" | "instagram";
+    scheduled_for: string;
+    caption: string | null;
+    image_url: string | null;
+  }[];
+  const activeLimit = getPostLimit(profile);
+  const usagePercent =
+    activeLimit > 0
+      ? Math.round((scheduledPosts.length / activeLimit) * 100)
+      : 0;
 
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-6">
-        <div>
-          <h2 className="text-3xl md:text-4xl font-black tracking-tighter mb-2">
-            Content{" "}
-            <span className="font-serif italic font-normal text-champagne">
-              Library
-            </span>
-          </h2>
-          <p className="text-ivory/60 font-mono text-xs uppercase tracking-widest">
-            Manage your generated posts and drafts.
-          </p>
-        </div>
-        <Button
-          asChild
-          className="rounded-full px-6 h-12 shadow-[0_0_20px_rgba(201,168,76,0.2)] hover:shadow-[0_0_30px_rgba(201,168,76,0.4)] transition-shadow"
-        >
-          <Link href="/dashboard/posts/new">
-            <Plus className="w-5 h-5 mr-2" /> New Post
-          </Link>
-        </Button>
-      </div>
-
-      {!posts || posts.length === 0 ? (
-        <div className="glass-panel rounded-[2rem] p-12 border border-white/5 text-center">
-          <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center mx-auto mb-6">
-            <ImageIcon className="w-8 h-8 text-ivory/40" />
+    <PostDashboardProvider>
+      <div className="flex-1 flex flex-col h-full bg-light-background">
+        {/* Sticky Header */}
+        <header className="sticky top-0 z-20 bg-light-background border-b border-light-clinical-gray/50 px-4 md:px-8 py-4 md:py-6 flex flex-col md:flex-row md:items-center justify-between">
+          <div className="flex items-center justify-between md:justify-start w-full md:w-auto">
+            <h1 className="hidden md:block font-sans text-2xl md:text-3xl font-bold tracking-tight text-gray-900 leading-none">
+              Ütemező Naptár
+            </h1>
           </div>
-          <h3 className="text-2xl font-serif italic mb-2">No posts yet</h3>
-          <p className="text-ivory/60 mb-8 max-w-md mx-auto">
-            Your content library is empty. Generate your first AI-powered post
-            to get started.
-          </p>
-          <Button asChild className="rounded-full px-8">
-            <Link href="/dashboard/posts/new">Generate Post</Link>
-          </Button>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {posts.map((post) => (
-            <div
-              key={post.id}
-              className="glass-panel rounded-3xl overflow-hidden border border-white/5 group hover:border-champagne/30 transition-colors flex flex-col"
-            >
-              <div className="aspect-square relative bg-obsidian/80 border-b border-white/5 flex items-center justify-center overflow-hidden">
-                {post.image_url ? (
-                  <img
-                    src={post.image_url}
-                    alt="Post image"
-                    className="object-cover w-full h-full group-hover:scale-105 transition-transform duration-500"
-                  />
-                ) : (
-                  <ImageIcon className="w-12 h-12 text-ivory/20" />
-                )}
-                <div className="absolute top-4 right-4 flex gap-2">
-                  <span
-                    className={`px-3 py-1 rounded-full text-xs font-mono uppercase tracking-widest backdrop-blur-md border ${
-                      post.status === "published"
-                        ? "bg-green-500/20 text-green-300 border-green-500/30"
-                        : post.status === "scheduled"
-                          ? "bg-blue-500/20 text-blue-300 border-blue-500/30"
-                          : "bg-slate/80 text-ivory/80 border-white/10"
-                    }`}
-                  >
-                    {post.status}
-                  </span>
-                </div>
+
+          {/* Mobile Title (visible only below md) */}
+          <div className="md:hidden pt-2 pb-1 cursor-default">
+            <h1 className="font-sans text-xl font-medium text-gray-900 tracking-wide leading-none">
+              Ütemező Naptár
+            </h1>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 md:gap-6 mt-2 md:mt-0">
+            <div className="flex items-center gap-4">
+              <div className="hidden md:flex items-center gap-2 px-4 py-2 bg-white border border-light-clinical-gray rounded text-xs font-medium">
+                <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                <span className="text-gray-600">
+                  {scheduledPosts.length} / {activeLimit} aktív poszt
+                </span>
               </div>
-              <div className="p-6 flex-1 flex flex-col">
-                <p className="text-sm text-ivory/80 line-clamp-3 mb-4 flex-1">
-                  {post.caption}
-                </p>
-                <div className="flex items-center justify-between pt-4 border-t border-white/5">
-                  <div className="text-xs text-ivory/40 font-mono flex items-center gap-2">
-                    <Calendar className="w-3 h-3" />
-                    {format(new Date(post.created_at), "MMM d, yyyy")}
-                  </div>
-                  <div className="flex gap-2">
-                    <button className="p-2 text-ivory/40 hover:text-champagne transition-colors">
-                      <Edit2 className="w-4 h-4" />
-                    </button>
-                    <button className="p-2 text-ivory/40 hover:text-red-400 transition-colors">
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
+              <HeaderNewPostButton />
             </div>
-          ))}
-        </div>
-      )}
-    </div>
+          </div>
+        </header>
+
+        {expiringAccount && (
+          <div className="mx-4 md:mx-8 mt-3 rounded-xl border border-red-200 bg-red-50/80 px-5 py-3 text-sm text-red-700 flex items-start gap-2">
+            <span className="shrink-0 mt-0.5">⚠️</span>
+            <span>
+              A(z){" "}
+              <strong>
+                {expiringAccount.provider === "facebook"
+                  ? "Facebook"
+                  : "Instagram"}
+              </strong>{" "}
+              fiókod tokenje lejárt. Az ütemezett posztok nem fognak megjelenni,
+              amíg újra nem csatlakoztatod.
+              <a
+                href="/dashboard/account-billing"
+                className="ml-1 font-semibold underline hover:text-red-900"
+              >
+                Újracsatlakoztatás →
+              </a>
+            </span>
+          </div>
+        )}
+        {soonExpiringAccount && (
+          <div className="mx-4 md:mx-8 mt-3 rounded-xl border border-amber-200 bg-amber-50/80 px-5 py-3 text-sm text-amber-700 flex items-start gap-2">
+            <span className="shrink-0 mt-0.5">⏳</span>
+            <span>
+              A(z){" "}
+              <strong>
+                {soonExpiringAccount.provider === "facebook"
+                  ? "Facebook"
+                  : "Instagram"}
+              </strong>{" "}
+              fiókod tokenje hamarosan lejár. Csatlakoztasd újra, hogy az
+              ütemezett posztjaid zavartalanul megjelenjenek.
+              <a
+                href="/dashboard/account-billing"
+                className="ml-1 font-semibold underline hover:text-amber-900"
+              >
+                Újracsatlakoztatás →
+              </a>
+            </span>
+          </div>
+        )}
+
+        <PostsDashboardClient
+          scheduledPosts={scheduledPosts}
+          profile={profile ?? { plan: "free", subscription_status: "inactive" }}
+          connectedPlatforms={(connectedRows ?? []).map(
+            (row) => row.provider as "facebook" | "instagram",
+          )}
+        />
+      </div>
+    </PostDashboardProvider>
   );
 }

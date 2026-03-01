@@ -1,14 +1,17 @@
 import { createBrowserClient } from "@supabase/ssr";
 
+function getSupabaseEnv() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+
+  if (!url || !anonKey) {
+    throw new Error("Supabase environment variables are not configured.");
+  }
+
+  return { url, anonKey };
+}
+
 export function createClient() {
-  return createBrowserClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL || "http://localhost:3000",
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "none",
-    {
-      cookieOptions: {
-        sameSite: "none",
-        secure: true,
-      },
-    },
-  );
+  const { url, anonKey } = getSupabaseEnv();
+  return createBrowserClient(url, anonKey);
 }

@@ -378,7 +378,7 @@ export function LandingExperience({
               </div>
 
               <div data-hero>
-                <h1 className="text-5xl font-extrabold leading-[1.0] tracking-tight text-[#1A1A1A] md:text-6xl lg:text-7xl">
+                <h1 className="text-5xl font-bold leading-[1.0] tracking-tight text-[#1A1A1A] md:text-6xl lg:text-7xl">
                   Automatizált
                   <span className="display-serif block text-[1.05em]">
                     {" "}
@@ -549,7 +549,7 @@ export function LandingExperience({
 
         <div className="mx-auto max-w-7xl px-6 md:px-10 relative">
           <div data-reveal className="mb-14 text-center">
-            <h2 className="text-4xl font-extrabold tracking-tight text-[#F5F3EE] md:text-5xl">
+            <h2 className="text-4xl font-bold tracking-tight text-[#F5F3EE] md:text-5xl">
               Kisvállalkozások számára
               <span className="display-serif block text-6xl"> tervezve</span>
             </h2>
@@ -667,6 +667,26 @@ export function LandingExperience({
         id="hogyan"
         className="relative bg-[#F2F0E9] py-20 overflow-hidden"
       >
+        {/* Giant background rocket — decorative, half off right edge */}
+        <div className="pointer-events-none absolute -right-30 top-30 z-0 opacity-[0.3]">
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#1A1A1A"
+            strokeWidth="0.6"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            className="w-[800px] h-[800px] -rotate-80"
+            aria-hidden="true"
+          >
+            <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+            <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+            <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+            <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
+          </svg>
+        </div>
+
         {/* Colorful gradient blobs */}
         <div className="pointer-events-none absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-white/60 to-transparent z-10" />
         <div className="pointer-events-none absolute left-[10%] top-[10%] h-[500px] w-[500px] rounded-full bg-[#CC5833]/15 blur-[120px] mix-blend-multiply" />
@@ -809,7 +829,7 @@ export function LandingExperience({
                 </p>
                 <div className="space-y-4">
                   {[
-                    "0 – 7 990 Ft / hó",
+                    "0 – 7 999 Ft / hó",
                     "10 perc beállítani",
                     "Teljes kontroll",
                     "Azonnali módosítások",
@@ -894,7 +914,7 @@ export function LandingExperience({
                       </div>
                     </div>
                   </div>
-                  <span className="font-mono text-[10px] font-bold tracking-widest text-[#F2F0E9]/30 rounded-full border border-[#F2F0E9]/15 px-3 py-1">
+                  <span className="font-mono text-[10px] font-bold tracking-widest text-[#F2F0E9]/50 rounded-full border border-[#F2F0E9]/15 px-3 py-1">
                     01 // PLAN
                   </span>
                 </div>
@@ -905,40 +925,58 @@ export function LandingExperience({
                     {["H", "K", "SZE", "CS", "P", "SZO", "V"].map((d) => (
                       <div
                         key={d}
-                        className="text-center text-[10px] font-bold tracking-widest text-[#F2F0E9]/40"
+                        className="text-center text-[12px] font-bold tracking-widest text-[#F2F0E9]/50"
                       >
                         {d}
                       </div>
                     ))}
                   </div>
-                  <div className="grid grid-cols-7 gap-2 h-[160px]">
-                    {Array.from({ length: 14 }).map((_, i) => {
+                  <div className="grid grid-cols-7 gap-2 h-[460px]">
+                    {Array.from({ length: 31 }).map((_, i) => {
                       // Post slots
-                      const hasPost1 = i === 2; // Wed
+                      const hasPost1 = i === 3; // Wed
                       const hasPost2 = i === 9; // Wed next week
                       const hasPost3 = i === 12; // Sat next week
+                      const hasPost4 = i === 14; // Sat next week
+                      const hasPost5 = i === 18; // Sat next week
+                      const hasPost6 = i === 19; // Sat next week
+                      const hasPost7 = i === 23; // Sat next week
+                      const hasPost8 = i === 27; // Sat next week
+                      const hasPost9 = i === 29; // Sat next week
 
                       return (
                         <div
                           key={i}
-                          className={`relative overflow-hidden rounded-xl border border-[#F2F0E9]/5 p-2 transition-all duration-300 ${
+                          className={`relative w-9 h-20 md:w-12 md:h-20 lg:w-18 lg:h-24 overflow-hidden rounded-xl border border-[#F2F0E9]/5 p-2 transition-all duration-200 ${
                             hasPost1
                               ? "bg-gradient-to-b from-[#CC5833]/20 to-[#CC5833]/5 border-[#CC5833]/40 shadow-[0_4px_16px_rgba(204,88,51,0.2)]"
                               : hasPost2
                                 ? "bg-gradient-to-b from-[#1877F2]/20 to-[#1877F2]/5 border-[#1877F2]/40 shadow-[0_4px_16px_rgba(24,119,242,0.2)]"
                                 : hasPost3
-                                  ? "bg-gradient-to-b from-[#2E4036]/40 to-[#2E4036]/10 border-[#4ade80]/40 shadow-[0_4px_16px_rgba(74,222,128,0.15)]"
-                                  : "bg-[#F2F0E9]/[0.02] hover:bg-[#F2F0E9]/[0.05]"
+                                  ? "bg-gradient-to-b from-[#CC5833]/20 to-[#CC5833]/5 border-[#CC5833]/40 shadow-[0_4px_16px_rgba(204,88,51,0.2)]"
+                                  : hasPost4
+                                    ? "bg-gradient-to-b from-[#1877F2]/20 to-[#1877F2]/5 border-[#1877F2]/40 shadow-[0_4px_16px_rgba(24,119,242,0.2)]"
+                                    : hasPost5
+                                      ? "bg-gradient-to-b from-[#CC5833]/20 to-[#CC5833]/5 border-[#CC5833]/40 shadow-[0_4px_16px_rgba(204,88,51,0.2)]"
+                                      : hasPost6
+                                        ? "bg-gradient-to-b from-[#1877F2]/20 to-[#1877F2]/5 border-[#1877F2]/40 shadow-[0_4px_16px_rgba(24,119,242,0.2)]"
+                                        : hasPost7
+                                          ? "bg-gradient-to-b from-[#CC5833]/20 to-[#CC5833]/5 border-[#CC5833]/40 shadow-[0_4px_16px_rgba(204,88,51,0.2)]"
+                                          : hasPost8
+                                            ? "bg-gradient-to-b from-[#1877F2]/20 to-[#1877F2]/5 border-[#1877F2]/40 shadow-[0_4px_16px_rgba(24,119,242,0.2)]"
+                                            : hasPost9
+                                              ? "bg-gradient-to-b from-[#1877F2]/20 to-[#1877F2]/5 border-[#1877F2]/40 shadow-[0_4px_16px_rgba(24,119,242,0.2)]"
+                                              : "bg-[#F2F0E9]/[0.02] hover:bg-[#F2F0E9]/[0.05]"
                           }`}
                         >
-                          <div className="text-[9px] font-semibold text-[#F2F0E9]/30 mb-1">
-                            {i + 14}
+                          <div className="text-[10px] font-semibold text-[#F2F0E9]/80 mb-1">
+                            {i + 1}
                           </div>
                           {hasPost1 && (
                             <div className="mt-1 space-y-1.5">
                               <div className="h-2.5 w-full rounded bg-[#CC5833]/80 animate-pulse" />
                               <div className="h-1.5 w-2/3 rounded bg-[#CC5833]/40" />
-                              <div className="absolute bottom-1 right-1 flex gap-0.5">
+                              <div className="absolute bottom-2.5 right-2.5 flex gap-0.5">
                                 <div className="h-[10px] w-[10px] rounded bg-[#DD2A7B]/80" />
                               </div>
                             </div>
@@ -947,15 +985,72 @@ export function LandingExperience({
                             <div className="mt-1 space-y-1.5">
                               <div className="h-2.5 w-full rounded bg-[#1877F2]/80" />
                               <div className="h-1.5 w-3/4 rounded bg-[#1877F2]/40" />
-                              <div className="absolute bottom-1 right-1 flex gap-0.5">
+                              <div className="absolute bottom-2.5 right-2.5 flex gap-0.5">
                                 <div className="h-[10px] w-[10px] rounded bg-[#1877F2]/80" />
                               </div>
                             </div>
                           )}
                           {hasPost3 && (
                             <div className="mt-1 space-y-1.5">
-                              <div className="h-2.5 w-full rounded bg-[#4ade80]/60" />
-                              <div className="h-1.5 w-1/2 rounded bg-[#4ade80]/30" />
+                              <div className="h-2.5 w-full rounded bg-[#CC5833]/80 animate-pulse" />
+                              <div className="h-1.5 w-2/3 rounded bg-[#CC5833]/40" />
+                              <div className="absolute bottom-2.5 right-2.5 flex gap-0.5">
+                                <div className="h-[10px] w-[10px] rounded bg-[#DD2A7B]/80" />
+                              </div>
+                            </div>
+                          )}
+                          {hasPost4 && (
+                            <div className="mt-1 space-y-1.5">
+                              <div className="h-2.5 w-full rounded bg-[#1877F2]/80" />
+                              <div className="h-1.5 w-3/4 rounded bg-[#1877F2]/40" />
+                              <div className="absolute bottom-2.5 right-2.5 flex gap-0.5">
+                                <div className="h-[10px] w-[10px] rounded bg-[#1877F2]/80" />
+                              </div>
+                            </div>
+                          )}
+                          {hasPost5 && (
+                            <div className="mt-1 space-y-1.5">
+                              <div className="h-2.5 w-full rounded bg-[#CC5833]/80 animate-pulse" />
+                              <div className="h-1.5 w-2/3 rounded bg-[#CC5833]/40" />
+                              <div className="absolute bottom-2.5 right-2.5 flex gap-0.5">
+                                <div className="h-[10px] w-[10px] rounded bg-[#DD2A7B]/80" />
+                              </div>
+                            </div>
+                          )}
+                          {hasPost6 && (
+                            <div className="mt-1 space-y-1.5">
+                              <div className="h-2.5 w-full rounded bg-[#1877F2]/80" />
+                              <div className="h-1.5 w-3/4 rounded bg-[#1877F2]/40" />
+                              <div className="absolute bottom-2.5 right-2.5 flex gap-0.5">
+                                <div className="h-[10px] w-[10px] rounded bg-[#1877F2]/80" />
+                              </div>
+                            </div>
+                          )}
+                          {hasPost7 && (
+                            <div className="mt-1 space-y-1.5">
+                              <div className="h-2.5 w-full rounded bg-[#CC5833]/80 animate-pulse" />
+                              <div className="h-1.5 w-2/3 rounded bg-[#CC5833]/40" />
+                              <div className="absolute bottom-2.5 right-2.5 flex gap-0.5">
+                                <div className="h-[10px] w-[10px] rounded bg-[#DD2A7B]/80" />
+                              </div>
+                            </div>
+                          )}
+                          {hasPost8 && (
+                            <div className="mt-1 space-y-1.5">
+                              <div className="h-2.5 w-full rounded bg-[#1877F2]/80" />
+                              <div className="h-1.5 w-3/4 rounded bg-[#1877F2]/40" />
+                              <div className="absolute bottom-2.5 right-2.5 flex gap-0.5">
+                                <div className="h-[10px] w-[10px] rounded bg-[#1877F2]/80" />
+                              </div>
+                            </div>
+                          )}
+                          {hasPost9 && (
+                            <div className="mt-1 space-y-1.5">
+                              <div className="h-2.5 w-full rounded bg-[#1877F2]/80" />
+                              <div className="h-1.5 w-3/4 rounded bg-[#1877F2]/40" />
+                              <div className="absolute bottom-2.5 right-2.5 flex gap-0.5">
+                                <div className="h-[10px] w-[10px] rounded bg-[#1877F2]/80" />
+                              </div>
                             </div>
                           )}
                         </div>
@@ -969,25 +1064,25 @@ export function LandingExperience({
             {/* ── 02 // WRITE — Premium AI Writer: col-span-2 */}
             <div
               data-bento
-              className="group relative overflow-hidden rounded-3xl bg-white p-7 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.1)] transition-all duration-500 hover:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.15)] md:col-span-2"
+              className="group relative overflow-hidden rounded-3xl bg-[#1B1B1B] p-7 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.1)] transition-all duration-500 hover:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.15)] md:col-span-2"
             >
-              <div className="absolute right-0 top-0 h-40 w-40 rounded-full bg-gradient-to-br from-[#FFF3EE] to-transparent blur-2xl transition-transform duration-700 group-hover:scale-125" />
+              <div className="absolute left-0 top-0 h-40 w-40 rounded-full bg-gradient-to-br from-[#CC5833]/90 to-transparent blur-2xl transition-transform duration-700 group-hover:scale-125" />
 
               <div className="relative flex h-full flex-col">
                 <div className="mb-4 flex items-center justify-between">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FFF3EE] shadow-inner">
-                    <Sparkles className="h-6 w-6 text-[#CC5833]" />
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#CC5833] shadow-inner">
+                    <Sparkles className="h-6 w-6 text-[#FFF3EE]" />
                   </div>
-                  <span className="font-mono text-[10px] font-bold tracking-widest text-[#9CA3AF] rounded-full border border-gray-100 px-3 py-1 bg-gray-50/50">
+                  <span className="font-mono text-[10px] font-bold tracking-widest text-[#FFF3EE] rounded-full border border-[#FFF3EE]/80 px-3 py-1 bg-[#FFF3EE]/5">
                     02 // WRITE
                   </span>
                 </div>
-                <h3 className="mb-2 text-2xl font-extrabold text-[#1A1A1A]">
+                <h3 className="mb-2 text-2xl font-extrabold text-[#FFF3EE]">
                   AI Szövegírás
                 </h3>
-                <p className="mb-6 text-sm leading-relaxed text-[#6b7280]">
+                <p className="mb-6 text-sm leading-relaxed text-[#FFF3EE]/80">
                   Másodpercek alatt kész a poszt —{" "}
-                  <span className="font-semibold text-[#CC5833]">
+                  <span className="font-bold text-[#CC5833]">
                     te csak jóváhagyod.
                   </span>
                 </p>
@@ -995,19 +1090,19 @@ export function LandingExperience({
                 {/* Mock AI interface */}
                 <div className="mt-auto rounded-2xl border border-gray-100 bg-white p-4 shadow-[0_8px_30px_rgba(0,0,0,0.04)] ring-1 ring-gray-900/5 transition-transform duration-300 group-hover:-translate-y-1">
                   <div className="mb-3 flex items-center gap-2">
-                    <div className="h-6 w-6 rounded-full bg-gradient-to-tr from-[#CC5833] to-[#FF8C66] p-1 flex items-center justify-center">
-                      <Bot className="h-3 w-3 text-white" />
+                    <div className="h-8 w-8 rounded-full bg-gradient-to-tr from-[#CC5833] to-[#FF8C66] p-1 flex items-center justify-center">
+                      <Bot className="h-4 w-4 text-white" />
                     </div>
-                    <div className="h-1.5 w-16 rounded-full bg-gray-200" />
+                    <div className="h-1.5 w-28 rounded-full bg-gray-200" />
                   </div>
                   <div className="space-y-2">
-                    <div className="h-2 w-full rounded bg-gray-100" />
-                    <div className="h-2 w-5/6 rounded bg-gray-100" />
+                    <div className="h-2 w-full rounded bg-gray-200" />
+                    <div className="h-2 w-5/6 rounded bg-gray-200" />
                     <div className="flex gap-1 pt-2">
-                      <span className="text-[10px] font-bold text-[#1877F2]">
+                      <span className="text-[12px] font-bold text-[#1877F2]">
                         #tavasz
                       </span>
-                      <span className="text-[10px] font-bold text-[#DD2A7B]">
+                      <span className="text-[12px] font-bold text-[#DD2A7B]">
                         #újkollekció
                       </span>
                     </div>
@@ -1021,39 +1116,40 @@ export function LandingExperience({
               data-bento
               className="group relative overflow-hidden rounded-3xl bg-white p-7 shadow-[0_12px_40px_-12px_rgba(0,0,0,0.1)] transition-all duration-500 hover:shadow-[0_24px_60px_-12px_rgba(0,0,0,0.15)] md:col-span-2"
             >
-              <div className="absolute left-0 bottom-0 h-40 w-40 rounded-full bg-gradient-to-tr from-[#DBEAFE]/50 to-transparent blur-3xl transition-transform duration-700 group-hover:scale-125" />
+              <div className="absolute -left-4 -bottom-14 h-40 w-40 rounded-full bg-gradient-to-br from-[#1877F2]/90 to-transparent blur-2xl transition-transform duration-700 group-hover:scale-125" />
+              <div className="absolute -right-10 -bottom-14 h-40 w-40 rounded-full bg-gradient-to-br from-[#DD2A7B]/90 to-transparent blur-2xl transition-transform duration-700 group-hover:scale-125" />
 
               <div className="relative flex h-full flex-col">
                 <div className="mb-4 flex items-center justify-between">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-50 shadow-inner">
-                    <Layers className="h-6 w-6 text-[#6b7280]" />
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#1B1B1B] shadow-inner">
+                    <Layers className="h-6 w-6 text-[#FFF3EE]" />
                   </div>
-                  <span className="font-mono text-[10px] font-bold tracking-widest text-[#9CA3AF] rounded-full border border-gray-100 px-3 py-1 bg-gray-50/50">
+                  <span className="font-mono text-[10px] font-bold tracking-widest text-[#FFF3EE] rounded-full border border-[#FFF3EE] px-3 py-1 bg-[#1B1B1B]/90">
                     03 // SYNC
                   </span>
                 </div>
-                <h3 className="mb-2 text-2xl font-extrabold text-[#1A1A1A] leading-tight">
+                <h3 className="mb-2 text-2xl font-extrabold text-[#1B1B1B] leading-tight">
                   Egy kattintás,
                   <br />
                   két platform
                 </h3>
-                <p className="mb-6 text-sm leading-relaxed text-[#6b7280]">
+                <p className="mb-6 text-sm leading-relaxed text-[#1B1B1B]/90">
                   Instagram + Facebook egyszerre. Felejtsd el a másolgatást!
                 </p>
 
                 {/* Connecting platforms visual */}
-                <div className="mt-auto relative mx-auto flex w-full max-w-[200px] items-center justify-between px-2 py-4">
+                <div className="mt-auto relative mx-auto flex w-full max-w-[310px] items-center justify-between px-2 py-4">
                   {/* Connection line */}
                   <div className="absolute left-1/2 top-1/2 h-0.5 w-3/4 -translate-x-1/2 -translate-y-1/2 bg-gradient-to-r from-[#1877F2]/30 via-gray-200 to-[#DD2A7B]/30" />
                   <div className="absolute left-1/2 top-1/2 h-1 w-1/2 -translate-x-1/2 -translate-y-1/2 overflow-hidden">
-                    <div className="h-full w-4 bg-[#CC5833]/40 blur-sm animate-[translateX_1.5s_infinite_linear]" />
+                    <div className="h-full w-24 bg-[#CC5833]/40 blur-sm animate-[translateX_1.5s_infinite_linear]" />
                   </div>
 
                   {/* Icons */}
                   <div className="relative z-10 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#1877F2] text-white shadow-[0_8px_24px_rgba(24,119,242,0.4)] transition-transform duration-300 group-hover:scale-110 group-hover:-rotate-6">
                     <Facebook className="h-7 w-7" />
                   </div>
-                  <div className="relative z-10 flex h-16 w-16 items-center justify-center rounded-full bg-white text-[#CC5833] shadow-[0_4px_16px_rgba(0,0,0,0.08)] ring-4 ring-gray-50">
+                  <div className="relative z-10 flex h-16 w-16 items-center justify-center rounded-full bg-[#1B1B1B] text-white shadow-[0_4px_16px_rgba(0,0,0,0.08)]">
                     <Rocket className="h-7 w-7" />
                   </div>
                   <div
@@ -1092,6 +1188,9 @@ export function LandingExperience({
             </h2>
             <p className="mt-6 text-lg text-[#F2F0E9]/60">
               Bármikor lemondható. Nincs kockázat.
+              <span className="font-bold text-[#F2F0E9] bg-[#CC5833]/90 rounded-full px-3 py-1 ml-2 text-base">
+                Korai hozzáférés!
+              </span>
             </p>
           </div>
 
@@ -1123,7 +1222,7 @@ export function LandingExperience({
                     key={f}
                     className="flex items-center gap-3 text-sm text-[#F2F0E9]/80"
                   >
-                    <CheckCircle2 className="h-4 w-4 shrink-0 text-[#2E4036]" />
+                    <CheckCircle2 className="h-4 w-4 shrink-0 text-[#4ade80]" />
                     {f}
                   </li>
                 ))}
@@ -1145,15 +1244,22 @@ export function LandingExperience({
               <div className="pointer-events-none absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-[#1877F2]/20 blur-3xl" />
 
               <div className="relative">
-                <div className="mb-4 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#CC5833] to-[#FF8C66] px-3 py-1 text-xs font-bold text-white shadow-lg shadow-[#CC5833]/30">
-                  <Star className="h-3 w-3 fill-white" /> Legnépszerűbb
+                <div className="mb-3 flex flex-wrap items-center gap-2">
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-[#CC5833] to-[#FF8C66] px-3 py-1 text-sm font-bold text-white shadow-lg shadow-[#CC5833]/30">
+                    <Star className="h-3 w-3 fill-white" /> Legnépszerűbb
+                  </div>
                 </div>
-                <p className="mb-2 text-xs font-mono font-bold uppercase tracking-widest text-[#4ade80]">
+                <p className="mb-2 text-base font-mono font-bold uppercase tracking-widest text-[#4ade80]">
                   Pro
                 </p>
                 <div className="mb-1">
+                  <div className="flex items-baseline gap-2 -mb-1">
+                    <span className="text-xl line-through text-[#F2F0E9]/60 font-medium">
+                      4 999 Ft
+                    </span>
+                  </div>
                   <span className="text-5xl font-extrabold text-[#F2F0E9]">
-                    3 990 Ft
+                    3 999 Ft
                   </span>
                   <span className="text-[#F2F0E9]/60 ml-1">/hó</span>
                 </div>
@@ -1165,7 +1271,8 @@ export function LandingExperience({
                     "20 előre beütemezhető poszt",
                     "Facebook + Instagram",
                     "Kézi szerkesztő",
-                    "AI szövegírás (hamarosan)",
+                    "AI szövegírás",
+                    "Elsőbbségi támogatás",
                   ].map((f) => (
                     <li
                       key={f}
@@ -1189,12 +1296,17 @@ export function LandingExperience({
               data-price-card
               className="rounded-3xl border border-[#F2F0E9]/10 bg-[#F2F0E9]/[0.02] p-8 shadow-2xl backdrop-blur-sm transition-transform duration-300 hover:-translate-y-1 hover:border-[#F2F0E9]/20"
             >
-              <p className="mb-2 text-xs font-mono font-bold uppercase tracking-widest text-[#CC5833]">
+              <p className="mb-2 text-base font-mono font-bold uppercase tracking-widest text-[#CC5833]">
                 Elite
               </p>
               <div className="mb-1">
+                <div className="flex items-baseline gap-2 -mb-1">
+                  <span className="text-xl line-through text-[#F2F0E9]/50 font-medium">
+                    9 999 Ft
+                  </span>
+                </div>
                 <span className="text-4xl font-extrabold text-[#F2F0E9]">
-                  7 990 Ft
+                  7 999 Ft
                 </span>
                 <span className="text-[#F2F0E9]/50 ml-1">/hó</span>
               </div>
@@ -1206,7 +1318,7 @@ export function LandingExperience({
                   "50 előre beütemezhető poszt",
                   "Facebook + Instagram",
                   "Kézi szerkesztő",
-                  "AI szövegírás (hamarosan)",
+                  "KORLÁTLAN AI szövegírás",
                   "AI képgenerálás (hamarosan)",
                   "Elsőbbségi támogatás",
                 ].map((f) => (
@@ -1312,7 +1424,7 @@ export function LandingExperience({
             Közvetlen visszajelzést adhatsz a fejlesztésbe, és elsőként éred el
             az új funkciókat.{" "}
             <span className="font-bold text-[#F2F0E9]/85">
-              Limitált helyek!
+              Korai hozzáférés!
             </span>
           </p>
 

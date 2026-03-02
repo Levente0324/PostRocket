@@ -122,7 +122,7 @@ export function Sidebar({ planLabel, isPro, isElite, userEmail }: Props) {
             </div>
             <button
               onClick={handleLogout}
-              className="text-white/40 hover:text-red-500 transition-colors"
+              className="text-white/40 hover:text-red-500 transition-colors cursor-pointer"
               title="Kijelentkezés"
             >
               <span className="material-symbols-outlined text-[20px]">

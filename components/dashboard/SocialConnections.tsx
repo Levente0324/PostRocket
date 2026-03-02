@@ -100,6 +100,15 @@ export function SocialConnections({ facebook, instagram }: Props) {
             {facebook?.account_name || "Nincs Facebook oldal kapcsolva."}
           </p>
 
+          {!facebook && (
+            <p className="text-xs text-gray-400 mb-3 leading-relaxed">
+              A Facebook oldal csatlakoztatása a Meta bejelentkezési oldalán
+              keresztül történik — ez várható. A csatlakozáshoz egy Facebook{" "}
+              <span className="font-medium text-gray-500">oldalra</span> (Page)
+              van szükség — a személyes profilod nem elegendő.
+            </p>
+          )}
+
           {facebook && getTokenStatus(facebook.expires_at) !== "ok" && (
             <div
               className={`flex items-start gap-2 rounded-lg px-3 py-2 mb-3 text-xs font-medium ${
@@ -167,6 +176,15 @@ export function SocialConnections({ facebook, instagram }: Props) {
             {instagram?.account_name ||
               "Nincs Instagram üzleti fiók kapcsolva."}
           </p>
+
+          {!instagram && (
+            <p className="text-xs text-gray-400 mb-3 leading-relaxed">
+              Az Instagram üzleti fiók csatlakoztatása a Meta (Facebook)
+              bejelentkezési oldalán keresztül történik — ez várható. Az
+              Instagram fiókodnak üzleti fióknak kell lennie, és egy Facebook
+              oldalhoz kell kapcsolódnia.
+            </p>
+          )}
 
           {instagram && getTokenStatus(instagram.expires_at) !== "ok" && (
             <div

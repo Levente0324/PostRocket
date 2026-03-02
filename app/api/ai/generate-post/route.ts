@@ -38,7 +38,14 @@ export async function POST(req: Request) {
     });
 
     const body = await req.json();
-    const { prompt: rawPrompt, platform: rawPlatform, tone: rawTone } = body;
+    const {
+      prompt: rawPrompt,
+      platform: rawPlatform,
+      tone: rawTone,
+      length: rawLength,
+      hashtags: rawHashtags,
+      emojis: rawEmojis,
+    } = body;
 
     // Enforce input length limits to prevent oversized payloads
     const prompt =
@@ -46,6 +53,12 @@ export async function POST(req: Request) {
     const platform =
       typeof rawPlatform === "string" ? rawPlatform.slice(0, 50) : "";
     const tone = typeof rawTone === "string" ? rawTone.slice(0, 100) : "";
+    const length =
+      typeof rawLength === "string" ? rawLength.slice(0, 50) : "Közepes";
+    const hashtags =
+      typeof rawHashtags === "string" ? rawHashtags.slice(0, 50) : "Kevés";
+    const emojis =
+      typeof rawEmojis === "string" ? rawEmojis.slice(0, 50) : "Mérsékelt";
 
     if (!prompt) {
       return NextResponse.json(
@@ -83,8 +96,10 @@ export async function POST(req: Request) {
     }
     const ai = new GoogleGenAI({ apiKey: geminiKey });
 
+    // Truncate server-side regardless of client-enforced limit — guards against
+    // direct DB writes or future tooling bypassing the UI's maxLength.
     const businessContext = profile?.ai_options
-      ? `\nKontextus a vállalkozásról és a stílusról:\n${profile.ai_options}\n`
+      ? `\nKontextus a vállalkozásról és a stílusról:\n${profile.ai_options.slice(0, 2000)}\n`
       : "";
 
     const toneInstruction =
@@ -92,7 +107,28 @@ export async function POST(req: Request) {
         ? `Kifejezetten erre a hangnemre törekedj: ${tone.toUpperCase()}. `
         : "A hangnem legyen profi, szakmai, de közösségi médiába illő.";
 
-    const systemInstruction = `Te egy profi magyar social media menedzser vagy, akinek az a feladata, hogy a lehető legvonzóbb, konverzió fókuszált ${platform} posztokat írd meg. ${toneInstruction} Használd a megadott kontextust (ha van) és írj közvetlenül egy kész, azonnal posztolható szöveget (ne írj bevezetőt, sem üdvözlést, csakis a poszt szövegét hasznos hashtagekkel együtt). Használj emojikat a platformnak megfelelően. A nyelv kizárólag MAGYAR.`;
+    const lengthInstruction =
+      length === "Rövid"
+        ? "A poszt legyen rövid és tömör (maximum 2-3 mondat)."
+        : length === "Hosszú"
+          ? "A poszt legyen részletes, hosszabb (legalabb 4-6 mondat, több bekezdéssel)."
+          : "A poszt közepes hosszúságú legyen (3-4 mondat).";
+
+    const hashtagInstruction =
+      hashtags === "Nincs"
+        ? "NE használj hashtageket a szövegben."
+        : hashtags === "Sok"
+          ? "Használj 10-15 releváns hashtaget a szöveg végén."
+          : "Használj 3-5 jól célzott hashtaget a szöveg végén.";
+
+    const emojiInstruction =
+      emojis === "Nincs"
+        ? "NE használj emojikat."
+        : emojis === "Sok"
+          ? "Használj sok emojit a szöveg egészében a dinamikus hatás érdekében."
+          : "Használj mérsékelten néhány emojit.";
+
+    const systemInstruction = `Te egy profi magyar social media menedzser vagy, akinek az a feladata, hogy a lehető legvonzóbb, konverzió fókuszált ${platform} posztokat íd meg. ${toneInstruction} ${lengthInstruction} ${hashtagInstruction} ${emojiInstruction} Használd a megadott kontextust (és a vállalkozás adatait!) és írj közvetlenül egy kész, azonnal posztolható szöveget (ne írj bevezetőt, sem üdvözlést, csakis a poszt szövegét). A nyelv kizárólag MAGYAR.`;
 
     const fullPrompt = `${systemInstruction}\n${businessContext}\nFelhasználó kérése a poszttal kapcsolatban:\n${prompt}`;
 

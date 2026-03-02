@@ -53,7 +53,7 @@
 
 @theme {
   --font-sans: "Outfit", "Segoe UI", "Helvetica Neue", sans-serif;
-  --font-serif: "Cormorant Garamond", "Georgia", serif;
+  --font-serif: "Lora", "Georgia", serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", "Menlo", monospace;
   --font-display: var(--font-sans);
 
@@ -252,7 +252,7 @@
   .display-serif {
     font-family: var(--font-serif);
     font-style: italic;
-    font-weight: 400;
+    font-weight: 500;
     color: var(--clay);
     letter-spacing: -0.01em;
   }

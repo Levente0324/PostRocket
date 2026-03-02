@@ -286,6 +286,7 @@ export async function POST(req: Request) {
       .from("scheduled_posts")
       .select("id, post_id, posts!inner(user_id)")
       .eq("id", input.editId)
+      .eq("status", "scheduled")
       .eq("posts.user_id", user.id)
       .single();
 

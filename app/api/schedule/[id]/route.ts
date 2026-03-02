@@ -60,27 +60,44 @@ export async function DELETE(
   }
 
   // Clean up uploaded images from storage (non-fatal — post is already deleted).
-  // Use parseStoredImages for consistency: handles JSON array, comma-separated,
-  // and plain single-URL formats that may exist in legacy records.
+  // Reference-count guard: only delete a storage file if no other post owned by
+  // this user still references it. This protects the sibling post in IG+FB pairs
+  // (both posts share the same image URLs; deleting one should never orphan the other).
   const imageUrl = (scheduledPost.posts as any)?.image_url;
   if (imageUrl) {
     try {
       const { parseStoredImages } = await import("@/lib/social-account");
       const urls = parseStoredImages(imageUrl);
-      const paths = urls
-        .map((url) => {
-          try {
-            const urlObj = new URL(url);
-            const parts = urlObj.pathname.split("/post-media/");
-            return parts.length === 2 ? parts[1] : null;
-          } catch {
-            return null;
-          }
-        })
-        .filter((p): p is string => p !== null);
 
-      if (paths.length > 0) {
-        await supabase.storage.from("post-media").remove(paths);
+      const pathsToDelete: string[] = [];
+
+      for (const url of urls) {
+        // Check if any other post by this user still references this URL.
+        // The post we just deleted is already gone from the DB at this point.
+        // Escape SQL LIKE wildcards in the URL so underscores/percents are literals.
+        const escapedUrl = url.replace(/%/g, "\\%").replace(/_/g, "\\_");
+        const { count: refCount } = await supabase
+          .from("posts")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user.id)
+          .like("image_url", `%${escapedUrl}%`);
+
+        if ((refCount ?? 0) > 0) {
+          // Still referenced by another post (e.g. the IG/FB sibling) — skip.
+          continue;
+        }
+
+        try {
+          const urlObj = new URL(url);
+          const parts = urlObj.pathname.split("/post-media/");
+          if (parts.length === 2) pathsToDelete.push(parts[1]);
+        } catch {
+          // ignore malformed URL
+        }
+      }
+
+      if (pathsToDelete.length > 0) {
+        await supabase.storage.from("post-media").remove(pathsToDelete);
       }
     } catch {
       // Non-fatal: post is already deleted, image cleanup is best-effort

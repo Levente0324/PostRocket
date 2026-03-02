@@ -192,7 +192,15 @@ export async function DELETE(request: Request) {
   }
 
   // Tördelés a bucket névnél "post-media/"
-  const urlObj = new URL(url);
+  let urlObj: URL;
+  try {
+    urlObj = new URL(url);
+  } catch {
+    return NextResponse.json(
+      { error: "Érvénytelen URL formátum" },
+      { status: 400 },
+    );
+  }
   const pathParts = urlObj.pathname.split(`/${BUCKET}/`);
   if (pathParts.length !== 2) {
     return NextResponse.json(
@@ -209,6 +217,23 @@ export async function DELETE(request: Request) {
       { error: "Nincs jogosultságod a fájl törléséhez" },
       { status: 403 },
     );
+  }
+
+  // Reference-count guard: if any other saved post still references this URL
+  // (e.g. the IG sibling of an IG+FB pair), skip storage deletion so that
+  // post doesn't break. Treat this as a silent success from the caller's POV.
+  // Escape SQL LIKE wildcards so an underscore/percent in the URL is treated
+  // as a literal character, not a pattern wildcard.
+  const escapedUrl = url.replace(/%/g, "\\%").replace(/_/g, "\\_");
+  const { count: refCount } = await supabase
+    .from("posts")
+    .select("id", { count: "exact", head: true })
+    .eq("user_id", user.id)
+    .like("image_url", `%${escapedUrl}%`);
+
+  if ((refCount ?? 0) > 0) {
+    // Still referenced — do not delete from storage.
+    return NextResponse.json({ success: true });
   }
 
   const { error } = await supabase.storage.from(BUCKET).remove([storagePath]);

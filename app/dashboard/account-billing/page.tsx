@@ -4,6 +4,7 @@ import {
   syncStripeCheckoutSession,
 } from "@/app/actions/stripe";
 import { SocialConnections } from "@/components/dashboard/SocialConnections";
+import { UpgradeEliteButton } from "@/components/dashboard/UpgradeEliteButton";
 import { createClient } from "@/lib/supabase/server";
 import {
   hasProAccess,
@@ -71,8 +72,12 @@ export default async function AccountBillingPage({
     .eq("id", user.id)
     .single();
 
-  // Check if the paid subscription is set to cancel at period end
+  // Fetch active subscription details (cancellation + next billing info)
   let cancelAtDate: Date | null = null;
+  let nextBillingDate: Date | null = null;
+  let nextBillingAmountHuf: number | null = null;
+  let isDowngrading = false;
+
   if (profile?.stripe_customer_id && hasPaidAccess(profile)) {
     try {
       const stripeSecretKey = process.env.STRIPE_SECRET_KEY;
@@ -83,14 +88,116 @@ export default async function AccountBillingPage({
       });
       const subs = await stripe.subscriptions.list({
         customer: profile.stripe_customer_id,
-        status: "active",
-        limit: 1,
+        status: "all",
+        limit: 10,
+        expand: ["data.items.data.price"],
       });
-      if (subs.data[0]?.cancel_at_period_end && subs.data[0].cancel_at) {
-        cancelAtDate = new Date(subs.data[0].cancel_at * 1000);
+      // Pick the first active or trialing subscription (handles test mode trials)
+      const sub = subs.data.find(
+        (s) => s.status === "active" || s.status === "trialing",
+      );
+
+      if (sub) {
+        // In Stripe's clover API (2026-01-28), many fields moved from the subscription
+        // level to the subscription item level. Read from both to cover all cases.
+        const subItem = sub.items.data[0] as unknown as {
+          current_period_end?: number;
+          cancel_at?: number;
+          cancel_at_period_end?: boolean;
+        };
+        const periodEnd =
+          (sub as unknown as { current_period_end?: number })
+            .current_period_end ?? subItem?.current_period_end;
+        if (periodEnd) nextBillingDate = new Date(periodEnd * 1000);
+
+        const cancelAt =
+          (sub as unknown as { cancel_at?: number }).cancel_at ??
+          subItem?.cancel_at;
+
+        // cancel_at_period_end may also have moved to the item level in clover API
+        const cancelAtPeriodEnd =
+          sub.cancel_at_period_end || subItem?.cancel_at_period_end || false;
+
+        // Treat as cancellation if cancel_at_period_end is set OR if Stripe set a
+        // specific cancel_at timestamp (the portal sets cancel_at directly instead
+        // of cancel_at_period_end when scheduling a cancellation at period end).
+        if (cancelAtPeriodEnd || cancelAt) {
+          // Subscription is set to cancel — no future billing
+          const effectiveCancelAt = cancelAt ?? periodEnd;
+          if (effectiveCancelAt)
+            cancelAtDate = new Date(effectiveCancelAt * 1000);
+          isDowngrading = true;
+          nextBillingAmountHuf = 0;
+        } else {
+          // Check for a subscription schedule (e.g. portal-initiated downgrade Elite→Pro)
+          const scheduleRef = (
+            sub as unknown as { schedule?: string | { id: string } | null }
+          ).schedule;
+          const scheduleId =
+            typeof scheduleRef === "string"
+              ? scheduleRef
+              : (scheduleRef?.id ?? null);
+
+          if (scheduleId) {
+            try {
+              const schedule =
+                await stripe.subscriptionSchedules.retrieve(scheduleId);
+              const nowSec = Math.floor(Date.now() / 1000);
+              // Phases are ordered; find the next one that starts in the future
+              const futurePhase = (
+                schedule.phases as Array<{
+                  start_date: number;
+                  items: Array<{ price: string }>;
+                }>
+              )
+                .slice()
+                .sort((a, b) => a.start_date - b.start_date)
+                .find((p) => p.start_date > nowSec);
+
+              // If end_behavior is "cancel", the subscription will terminate at the end
+              // of the schedule — regardless of any intermediate phases (e.g. Elite→Pro→cancel).
+              // "release" means the sub continues with the last phase price (e.g. Elite→Pro downgrade).
+              const scheduleCancels = schedule.end_behavior === "cancel";
+
+              if (scheduleCancels) {
+                // Subscription will terminate — treat as cancellation
+                isDowngrading = true;
+                nextBillingAmountHuf = 0;
+                // Use the period end date already set above as the effective end date
+                if (nextBillingDate) cancelAtDate = nextBillingDate;
+              } else if (futurePhase?.items?.length) {
+                // Retrieve the price for the scheduled future plan
+                const futurePriceId = futurePhase.items[0].price;
+                const futurePrice = await stripe.prices.retrieve(futurePriceId);
+                nextBillingAmountHuf =
+                  futurePrice.unit_amount != null
+                    ? Math.round(futurePrice.unit_amount / 100)
+                    : 0;
+              } else {
+                // Schedule exists but no clear future phase — fall back to current price
+                const price = sub.items.data[0]?.price;
+                if (price?.unit_amount != null)
+                  nextBillingAmountHuf = Math.round(price.unit_amount / 100);
+              }
+            } catch {
+              // Schedule retrieval failed — fall back to current price
+              const price = sub.items.data[0]?.price;
+              if (price?.unit_amount != null)
+                nextBillingAmountHuf = Math.round(price.unit_amount / 100);
+            }
+          } else {
+            // No schedule — current price is the next billing price
+            const price = sub.items.data[0]?.price;
+            if (price?.unit_amount != null) {
+              // unit_amount is in fillérs (1/100 HUF) even though HUF is nominally zero-decimal,
+              // because the Stripe price was created with 2 implied decimal places.
+              nextBillingAmountHuf = Math.round(price.unit_amount / 100);
+            }
+          }
+        }
       }
-    } catch {
-      // Non-fatal — cancellation banner is informational only
+    } catch (err) {
+      console.error("[billing] Stripe fetch error:", err);
     }
   }
 
@@ -127,11 +234,6 @@ export default async function AccountBillingPage({
 
       <div className="p-4 md:p-8 relative z-0">
         <div className="max-w-[1400px] mx-auto space-y-6 pb-10">
-          <p className="mt-2 text-sm leading-relaxed text-gray-500 mb-6 px-1">
-            Kezeld az előfizetésed és kapcsold össze a közösségi média
-            fiókjaidat.
-          </p>
-
           {/* Alerts */}
           {billingError === "customer_missing" && (
             <div className="bg-white border border-light-clinical-gray rounded-xl shadow-sm px-6 py-4 text-sm text-amber-600">
@@ -234,14 +336,14 @@ export default async function AccountBillingPage({
                   {isPro && (
                     <li className="flex items-center gap-2 text-sm text-gray-600">
                       <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-light-primary" />
-                      AI szövegírás (hamarosan)
+                      AI szövegírás
                     </li>
                   )}
                   {isElite && (
                     <>
                       <li className="flex items-center gap-2 text-sm text-gray-600">
                         <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-light-primary" />
-                        AI szövegírás (hamarosan)
+                        AI szövegírás
                       </li>
                       <li className="flex items-center gap-2 text-sm text-gray-600">
                         <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-light-primary" />
@@ -252,13 +354,38 @@ export default async function AccountBillingPage({
                 </ul>
               </div>
 
-              <div className="rounded-xl border border-gray-200 bg-gray-50 p-5">
-                <p className="mb-2 text-xs font-mono font-semibold uppercase tracking-widest text-gray-500">
-                  Fiók
-                </p>
-                <p className="font-semibold text-gray-900 truncate">
-                  {user.email}
-                </p>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-5 space-y-3">
+                <div>
+                  <p className="mb-1 text-xs font-mono font-semibold uppercase tracking-widest text-gray-500">
+                    Fiók
+                  </p>
+                  <p className="font-semibold text-gray-900 truncate">
+                    {user.email}
+                  </p>
+                </div>
+                {isPaid && nextBillingDate && (
+                  <div className="pt-3 border-t border-gray-200">
+                    <p className="mb-1 text-xs font-mono font-semibold uppercase tracking-widest text-gray-500">
+                      {isDowngrading
+                        ? "Aktív időszak vége"
+                        : "Következő számlázás"}
+                    </p>
+                    <p className="font-semibold text-gray-900">
+                      {nextBillingDate.toLocaleDateString("hu-HU", {
+                        year: "numeric",
+                        month: "long",
+                        day: "numeric",
+                      })}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-0.5">
+                      {isDowngrading
+                        ? "Ezt követően: Ingyenes csomag (0 Ft/hó)"
+                        : nextBillingAmountHuf != null
+                          ? `${nextBillingAmountHuf.toLocaleString("hu-HU")} Ft/hó`
+                          : null}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -318,8 +445,16 @@ export default async function AccountBillingPage({
                       </span>
                     </div>
                     <div className="mb-1">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-xs line-through text-gray-400 font-medium">
+                          4 999 Ft
+                        </span>
+                        <span className="rounded-full bg-green-50 border border-green-200 px-2 py-0.5 text-[10px] font-bold text-green-600">
+                          Korai hozzáférés
+                        </span>
+                      </div>
                       <span className="text-3xl font-sans font-bold text-gray-900 leading-none">
-                        3 990 Ft
+                        3 999 Ft
                       </span>
                       <span className="text-gray-500">/hó</span>
                     </div>
@@ -330,8 +465,7 @@ export default async function AccountBillingPage({
                       {[
                         "20 aktív időzített poszt",
                         "Facebook + Instagram",
-                        "Carousel posztok",
-                        "AI szövegírás (hamarosan)",
+                        "AI szövegírás",
                       ].map((f) => (
                         <li
                           key={f}
@@ -364,8 +498,16 @@ export default async function AccountBillingPage({
                       </span>
                     </div>
                     <div className="mb-1">
+                      <div className="flex items-center gap-2 mb-0.5">
+                        <span className="text-xs line-through text-gray-400 font-medium">
+                          9 999 Ft
+                        </span>
+                        <span className="rounded-full bg-orange-50 border border-orange-200 px-2 py-0.5 text-[10px] font-bold text-light-primary">
+                          Korai hozzáférés
+                        </span>
+                      </div>
                       <span className="text-3xl font-sans font-bold text-gray-900 leading-none">
-                        7 990 Ft
+                        7 999 Ft
                       </span>
                       <span className="text-gray-600">/hó</span>
                     </div>
@@ -376,9 +518,8 @@ export default async function AccountBillingPage({
                       {[
                         "50 aktív időzített poszt",
                         "Facebook + Instagram",
-                        "Carousel posztok",
                         "KORLÁTLAN AI szövegírás",
-                        "KORLÁTLAN AI képgenerálás",
+                        "AI képgenerálás (hamarosan)",
                         "Elsőbbségi támogatás",
                       ].map((f) => (
                         <li
@@ -390,15 +531,19 @@ export default async function AccountBillingPage({
                         </li>
                       ))}
                     </ul>
-                    <form action={createStripeCheckoutSession}>
-                      <input type="hidden" name="plan" value="elite" />
-                      <button
-                        type="submit"
-                        className="flex w-full items-center justify-center gap-2 rounded-lg bg-light-primary text-white px-4 py-3 transition hover:bg-light-primary-hover font-semibold text-sm shadow-sm"
-                      >
-                        Elite előfizetés <ExternalLink className="h-4 w-4" />
-                      </button>
-                    </form>
+                    {isPro ? (
+                      <UpgradeEliteButton />
+                    ) : (
+                      <form action={createStripeCheckoutSession}>
+                        <input type="hidden" name="plan" value="elite" />
+                        <button
+                          type="submit"
+                          className="flex w-full items-center justify-center gap-2 rounded-lg bg-light-primary text-white px-4 py-3 transition hover:bg-light-primary-hover font-semibold text-sm shadow-sm"
+                        >
+                          Elite előfizetés <ExternalLink className="h-4 w-4" />
+                        </button>
+                      </form>
+                    )}
                   </div>
                 </div>
               </div>

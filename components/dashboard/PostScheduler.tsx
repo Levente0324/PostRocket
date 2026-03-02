@@ -79,6 +79,7 @@ type SelectedImage = {
   id: string;
   name: string;
   url: string;
+  size?: number;
 };
 
 type Props = {
@@ -179,8 +180,12 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
     const [showAIAssistant, setShowAIAssistant] = useState(false);
     const [aiPrompt, setAiPrompt] = useState("");
     const [aiTone, setAiTone] = useState("Szakmai");
+    const [aiLength, setAiLength] = useState("Közepes");
+    const [aiHashtags, setAiHashtags] = useState("Kevés");
+    const [aiEmojis, setAiEmojis] = useState("Mérsékelt");
     const [isGenerating, setIsGenerating] = useState(false);
     const [aiError, setAiError] = useState<string | null>(null);
+    const [bothPlatforms, setBothPlatforms] = useState(false);
 
     const [editingPostId, setEditingPostId] = useState<string | null>(null);
     const [postToDelete, setPostToDelete] = useState<string | null>(null);
@@ -284,6 +289,14 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
       selectedDayPlatforms.has("facebook") &&
       selectedDayPlatforms.has("instagram");
 
+    // True when both platforms are connected and neither has a post on this day yet (create-only).
+    const canPostBoth =
+      !editingPostId &&
+      connectedSet.has("instagram") &&
+      connectedSet.has("facebook") &&
+      !selectedDayPlatforms.has("instagram") &&
+      !selectedDayPlatforms.has("facebook");
+
     const resetWizard = () => {
       // Determine default platform based on connections if nothing selected
       if (
@@ -310,23 +323,34 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
       setAiPrompt("");
       setIsGenerating(false);
       setAiError(null);
+      setBothPlatforms(false);
       setEditingPostId(null);
       setShowEmojiPicker(false);
       setOriginalImageUrls(new Set());
     };
 
     const openEditChoice = (post: ScheduledPost) => {
+      // Reset all wizard state first so nothing leaks from a previous create/edit session
+      setBothPlatforms(false); // critical: prevents save button calling scheduleBothPlatforms
+      setShowAIAssistant(false);
+      setAiPrompt("");
+      setAiTone("Szakmai");
+      setAiLength("Közepes");
+      setAiHashtags("Kevés");
+      setAiEmojis("Mérsékelt");
+      setIsGenerating(false);
+      setAiError(null);
+      setShowEmojiPicker(false);
+      setError(null);
+      setSuccessMessage(null);
+
       setEditingPostId(post.id);
       setSelectedDate(parseISO(post.scheduled_for));
       setPlatform(post.platform);
 
-      if (post.platform === "instagram") {
-        setDescription(post.caption || "");
-        setText("");
-      } else {
-        setText(post.caption || "");
-        setDescription("");
-      }
+      // Always use `description` — the textarea always binds to it regardless of platform.
+      setDescription(post.caption || "");
+      setText("");
 
       try {
         if (post.image_url) {
@@ -349,9 +373,6 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
 
       setTime(format(parseISO(post.scheduled_for), "HH:mm"));
       setShowWizard(true);
-      setShowEmojiPicker(false);
-      setError(null);
-      setSuccessMessage(null);
     };
 
     const openDateChoice = (date: Date) => {
@@ -384,7 +405,13 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
       for (const url of newlyUploadedUrls) {
         fetch(`/api/uploads?url=${encodeURIComponent(url)}`, {
           method: "DELETE",
-        }).catch(() => {});
+        }).catch((err) => {
+          console.warn(
+            "[PostScheduler] Failed to clean up orphan image on cancel:",
+            url,
+            err,
+          );
+        });
       }
       closeAllModals();
     };
@@ -410,8 +437,12 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
       }
 
       // Client-side validation before upload
+      const alreadyUploadedBytes = images.reduce(
+        (sum, img) => sum + (img.size ?? 0),
+        0,
+      );
       const totalNewBytes = selectedFiles.reduce((sum, f) => sum + f.size, 0);
-      if (totalNewBytes > MAX_UPLOAD_TOTAL_BYTES) {
+      if (alreadyUploadedBytes + totalNewBytes > MAX_UPLOAD_TOTAL_BYTES) {
         setError(
           `A kijelölt képek összmérete meghaladja a 30MB-os korlátot. Kérlek, válassz kevesebb vagy kisebb képet.`,
         );
@@ -488,6 +519,7 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
             id: `${Date.now()}-${i}-${Math.random().toString(16).slice(2)}`,
             name: file.name || "kép",
             url: urlData.publicUrl,
+            size: file.size,
           });
         }
 
@@ -512,7 +544,13 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
         // Newly uploaded in this session — safe to delete immediately
         fetch(`/api/uploads?url=${encodeURIComponent(image.url)}`, {
           method: "DELETE",
-        }).catch(() => {});
+        }).catch((err) => {
+          console.warn(
+            "[PostScheduler] Failed to delete removed image:",
+            image.url,
+            err,
+          );
+        });
       }
       setImages((prev) => prev.filter((i) => i.id !== image.id));
     };
@@ -524,7 +562,11 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
         setError("Instagram poszthoz legalább 1 kép kötelező.");
         return;
       }
-      if (platform === "facebook" && !text.trim() && images.length === 0) {
+      if (
+        platform === "facebook" &&
+        !description.trim() &&
+        images.length === 0
+      ) {
         setError("Facebook poszthoz szöveg vagy legalább 1 kép kötelező.");
         return;
       }
@@ -548,7 +590,7 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
           time,
           platform,
           description,
-          text,
+          text: description,
           imageUrls: images.map((image) => image.url),
           scheduledFor: scheduledDateTime.toISOString(),
         };
@@ -576,6 +618,98 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
             }).catch(() => {});
           }
         }
+        closeAllModals();
+        router.refresh();
+      } catch {
+        setError("Hálózati hiba történt az ütemezés közben.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    /**
+     * Schedules the same post to BOTH Instagram and Facebook simultaneously.
+     * Creates two independent scheduled_posts rows, one per platform.
+     * If IG succeeds but FB fails the user is informed (IG post remains saved).
+     */
+    const scheduleBothPlatforms = async () => {
+      if (!selectedDate) return;
+
+      if (images.length === 0) {
+        setError(
+          "Mindkét platformra posztoláshoz legalább 1 kép kötelező (Instagram megköveteli).",
+        );
+        return;
+      }
+
+      const scheduledDateTime = parse(
+        `${format(selectedDate, "yyyy-MM-dd")} ${time}`,
+        "yyyy-MM-dd HH:mm",
+        new Date(),
+      );
+      if (scheduledDateTime < new Date()) {
+        setError("Múltbeli időpont nem választható ki.");
+        return;
+      }
+
+      setLoading(true);
+      setError(null);
+      try {
+        const imageUrls = images.map((img) => img.url);
+        const sharedDateTime = scheduledDateTime.toISOString();
+        const sharedDate = format(selectedDate, "yyyy-MM-dd");
+
+        // 1. Schedule Instagram post first (requires image — already validated above)
+        const igRes = await fetch("/api/schedule", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "regular",
+            date: sharedDate,
+            time,
+            platform: "instagram",
+            description,
+            text: "",
+            imageUrls,
+            scheduledFor: sharedDateTime,
+          }),
+        });
+        const igPayload = await igRes.json();
+        if (!igRes.ok) {
+          setError(
+            igPayload.error || "Az Instagram poszt ütemezése nem sikerült.",
+          );
+          return;
+        }
+
+        // 2. Schedule Facebook post with the same content
+        const fbRes = await fetch("/api/schedule", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "regular",
+            date: sharedDate,
+            time,
+            platform: "facebook",
+            description: "",
+            text: description,
+            imageUrls,
+            scheduledFor: sharedDateTime,
+          }),
+        });
+        const fbPayload = await fbRes.json();
+        if (!fbRes.ok) {
+          // IG was already saved — inform user of partial success
+          setError(
+            `Az Instagram poszt elmentve, de a Facebook ütemezése sikertelen: ${
+              fbPayload.error || "Ismeretlen hiba."
+            }`,
+          );
+          router.refresh();
+          return;
+        }
+
+        setSuccessMessage("A poszt mindkét platformra sikeresen időzítve! 🎉");
         closeAllModals();
         router.refresh();
       } catch {
@@ -616,17 +750,24 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
         const res = await fetch("/api/ai/generate-post", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ prompt: aiPrompt, platform, tone: aiTone }),
+          body: JSON.stringify({
+            prompt: aiPrompt,
+            platform,
+            tone: aiTone,
+            length: aiLength,
+            hashtags: aiHashtags,
+            emojis: aiEmojis,
+          }),
         });
         const data = await res.json();
         if (!res.ok)
           throw new Error(data?.error || "Hiba az AI generálás során.");
 
-        // Auto-fill the correct text area
+        // Auto-fill the text area — always use setDescription (textarea binds to it)
         if (platform === "instagram") {
           setDescription(data.text);
         } else {
-          setText(data.text);
+          setDescription(data.text);
         }
       } catch (err: any) {
         setAiError(err.message);
@@ -677,14 +818,14 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setViewMonth(subMonths(viewMonth, 1))}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 bg-white text-[#1A1A1A] transition-colors duration-150 hover:bg-white hover:text-[#1A1A1A] hover:border-[#1A1A1A]"
+                className="flex h-10 w-10 items-center justify-center cursor-pointer rounded-xl border border-black/30 bg-white text-[#1A1A1A] transition-colors duration-150 hover:bg-white/95 hover:text-[#1A1A1A] hover:border-[#1A1A1A]"
                 aria-label="Előző hónap"
               >
                 <ChevronLeft className="h-5 w-5" />
               </button>
               <button
                 onClick={() => setViewMonth(addMonths(viewMonth, 1))}
-                className="flex h-10 w-10 items-center justify-center rounded-xl border border-black/10 bg-white text-[#1A1A1A] transition-colors duration-150 hover:bg-white hover:text-[#1A1A1A] hover:border-[#1A1A1A]"
+                className="flex h-10 w-10 items-center justify-center cursor-pointer rounded-xl border border-black/30 bg-white text-[#1A1A1A] transition-colors duration-150 hover:bg-white/95 hover:text-[#1A1A1A] hover:border-[#1A1A1A]"
                 aria-label="Következő hónap"
               >
                 <ChevronRight className="h-5 w-5" />
@@ -790,14 +931,14 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                               : "border-l-light-primary"
                           }`}
                         >
-                          <div className="flex items-center justify-between mb-0.5">
+                          <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5 uppercase">
                               {post.platform === "facebook" ? (
-                                <Facebook className="h-3 w-3 text-blue-500 shrink-0" />
+                                <Facebook className="h-3.5 w-3.5 text-blue-500 shrink-0" />
                               ) : (
-                                <Instagram className="h-3 w-3 text-light-primary shrink-0" />
+                                <Instagram className="h-3.5 w-3.5 text-light-primary shrink-0" />
                               )}
-                              <span className="font-sans text-[10px] text-gray-500 font-semibold tracking-wider">
+                              <span className="font-sans text-[12px] text-gray-500 font-semibold tracking-wider">
                                 {format(parseISO(post.scheduled_for), "HH:mm")}
                               </span>
                             </div>
@@ -818,6 +959,19 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                         </div>
                       ))}
                     </div>
+                    {/* Small + in corner when 1 post exists but another platform slot is available */}
+                    {!unavailable &&
+                      isSelectable &&
+                      dayPosts.length > 0 &&
+                      [...connectedSet].some(
+                        (p) => !new Set(dayPosts.map((q) => q.platform)).has(p),
+                      ) && (
+                        <div className="mx-auto pt-2 flex items items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                          <div className="w-6 h-6 rounded-full bg-light-primary/10 flex items-center justify-center">
+                            <Plus className="h-3.5 w-3.5 text-light-primary" />
+                          </div>
+                        </div>
+                      )}
                   </div>
                 );
               })}
@@ -860,7 +1014,7 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                       : "w-0 opacity-0"
                   }`}
                 >
-                  <div className="w-full md:w-[300px] lg:w-[340px] max-h-[40vh] md:max-h-none md:h-[70vh] md:min-h-[400px] bg-white text-[#1A1A1A] p-4 md:p-5 lg:p-6 flex flex-col justify-between rounded-b-2xl md:rounded-2xl shadow-2xl border-t md:border border-gray-200 md:border-white/10 relative overflow-y-auto overflow-x-hidden">
+                  <div className="w-full md:w-[300px] lg:w-[340px] max-h-[40vh] md:max-h-none md:h-[70vh] md:min-h-[400px] bg-white text-[#1A1A1A] p-4 md:p-5 lg:p-6 flex flex-col justify-between rounded-b-2xl md:rounded-2xl shadow-2xl border-t md:border border-gray-200 md:border-white/10 relative overflow-hidden">
                     <div>
                       <div className="flex items-center justify-between mb-6">
                         <div className="flex items-center gap-3 text-[#CC5833]">
@@ -922,6 +1076,60 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                             </div>
                           </div>
                         </div>
+                        <div>
+                          <label className="block text-[12px] font-bold uppercase tracking-widest text-[#CC5833] mb-2 font-sans">
+                            Hosszúság
+                          </label>
+                          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold">
+                            {["Rövid", "Közepes", "Hosszú"].map((opt) => (
+                              <button
+                                key={opt}
+                                type="button"
+                                onClick={() => setAiLength(opt)}
+                                className={`flex-1 py-2 transition-colors ${aiLength === opt ? "bg-[#CC5833] text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+                              >
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[12px] font-bold uppercase tracking-widest text-[#CC5833] mb-2 font-sans">
+                            Hashtagek
+                          </label>
+                          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold">
+                            {["Nincs", "Kevés", "Sok"].map((opt) => (
+                              <button
+                                key={opt}
+                                type="button"
+                                onClick={() => setAiHashtags(opt)}
+                                className={`flex-1 py-2 transition-colors ${aiHashtags === opt ? "bg-[#CC5833] text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+                              >
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div>
+                          <label className="block text-[12px] font-bold uppercase tracking-widest text-[#CC5833] mb-2 font-sans">
+                            Emojik
+                          </label>
+                          <div className="flex rounded-lg border border-gray-200 overflow-hidden text-xs font-semibold">
+                            {["Nincs", "Mérsékelt", "Sok"].map((opt) => (
+                              <button
+                                key={opt}
+                                type="button"
+                                onClick={() => setAiEmojis(opt)}
+                                className={`flex-1 py-2 transition-colors ${aiEmojis === opt ? "bg-[#CC5833] text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+                              >
+                                {opt}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+
                         {aiError && (
                           <div className="p-3 mb-4 rounded-lg bg-red-50 text-red-600 text-sm border border-red-200">
                             {aiError}
@@ -988,37 +1196,80 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                           <span className="md:hidden">AI</span>
                         </button>
                       )}
-                      <div className="flex items-center bg-white border border-gray-200 rounded p-1">
+                      {/* Unified 3-tab platform switcher */}
+                      <div className="flex items-center bg-gray-100 border border-gray-200 rounded-lg p-1 gap-1">
+                        {/* Instagram tab */}
                         <button
-                          onClick={() => setPlatform("instagram")}
+                          onClick={() => {
+                            setBothPlatforms(false);
+                            setPlatform("instagram");
+                          }}
                           disabled={
+                            // Blocked if IG already has a post on this day AND we're not currently editing that IG post
                             (selectedDayPlatforms.has("instagram") &&
-                              postToDelete !== editingPostId) ||
+                              (!editingPostId || platform !== "instagram")) ||
                             !connectedSet.has("instagram")
                           }
-                          className={`px-2.5 md:px-3 py-1 text-xs md:text-sm font-bold rounded flex items-center gap-1 md:gap-1.5 transition-colors ${
-                            platform === "instagram"
-                              ? "bg-gray-100 text-[#1A1A1A]"
-                              : "text-gray-500 hover:bg-gray-50"
-                          } ${(selectedDayPlatforms.has("instagram") && !editingPostId) || !connectedSet.has("instagram") ? "opacity-40 cursor-not-allowed" : ""}`}
+                          className={`px-2.5 md:px-3 py-1.5 text-xs md:text-sm font-bold rounded-md flex items-center gap-1 md:gap-1.5 transition-all duration-200 ${
+                            !bothPlatforms && platform === "instagram"
+                              ? "bg-gradient-to-r from-[#f09433] via-[#e6683c] to-[#dc2743] text-white shadow-sm"
+                              : "text-gray-500 hover:text-gray-700 hover:bg-white/70"
+                          } ${
+                            (selectedDayPlatforms.has("instagram") &&
+                              (!editingPostId || platform !== "instagram")) ||
+                            !connectedSet.has("instagram")
+                              ? "opacity-40 cursor-not-allowed"
+                              : ""
+                          }`}
                         >
                           <Instagram className="h-3.5 w-3.5" /> IG
                         </button>
+
+                        {/* Facebook tab */}
                         <button
-                          onClick={() => setPlatform("facebook")}
+                          onClick={() => {
+                            setBothPlatforms(false);
+                            setPlatform("facebook");
+                          }}
                           disabled={
+                            // Blocked if FB already has a post on this day AND we're not currently editing that FB post
                             (selectedDayPlatforms.has("facebook") &&
-                              postToDelete !== editingPostId) ||
+                              (!editingPostId || platform !== "facebook")) ||
                             !connectedSet.has("facebook")
                           }
-                          className={`px-2.5 md:px-3 py-1 text-xs md:text-sm font-bold rounded flex items-center gap-1 md:gap-1.5 transition-colors ${
-                            platform === "facebook"
-                              ? "bg-gray-100 text-[#1A1A1A]"
-                              : "text-gray-500 hover:bg-gray-50"
-                          } ${(selectedDayPlatforms.has("facebook") && !editingPostId) || !connectedSet.has("facebook") ? "opacity-40 cursor-not-allowed" : ""}`}
+                          className={`px-2.5 md:px-3 py-1.5 text-xs md:text-sm font-bold rounded-md flex items-center gap-1 md:gap-1.5 transition-all duration-200 ${
+                            !bothPlatforms && platform === "facebook"
+                              ? "bg-[#1877F2] text-white shadow-sm"
+                              : "text-gray-500 hover:text-gray-700 hover:bg-white/70"
+                          } ${
+                            (selectedDayPlatforms.has("facebook") &&
+                              (!editingPostId || platform !== "facebook")) ||
+                            !connectedSet.has("facebook")
+                              ? "opacity-40 cursor-not-allowed"
+                              : ""
+                          }`}
                         >
                           <Facebook className="h-3.5 w-3.5" /> FB
                         </button>
+
+                        {/* Both tab — only shown when both platforms are available for this day */}
+                        {canPostBoth && (
+                          <button
+                            onClick={() => setBothPlatforms(true)}
+                            className={`px-2.5 md:px-3 py-2 text-xs md:text-sm font-bold rounded-md flex items-center gap-0.5 transition-all duration-200 ${
+                              bothPlatforms
+                                ? "bg-gradient-to-r from-[#e6683c] to-[#1877F2] text-white shadow-sm"
+                                : "text-gray-500 hover:text-gray-700 hover:bg-white/70"
+                            }`}
+                            title="Ütemezés mindkét platformra"
+                          >
+                            <Instagram className="h-4 w-4" />
+                            <span className="text-[15px] leading-none ml-0.5">
+                              +
+                            </span>
+                            <Facebook className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
 
                       <button
@@ -1032,12 +1283,8 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
 
                   <div className="flex-1 p-4 md:p-6 lg:p-8 overflow-y-auto flex flex-col">
                     <textarea
-                      value={platform === "instagram" ? description : text}
-                      onChange={(e) =>
-                        platform === "instagram"
-                          ? setDescription(e.target.value)
-                          : setText(e.target.value)
-                      }
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
                       placeholder="Kezdj el írni..."
                       className="w-full text-base lg:text-lg font-normal bg-transparent border-none placeholder-gray-300 text-gray-900 focus:ring-0 p-0 mb-6 flex-1 resize-none h-full outline-none leading-relaxed"
                     />
@@ -1068,30 +1315,32 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                         </div>
                       )}
 
-                      {images.length < 10 && (
-                        <label className="border-2 border-dashed border-gray-300 rounded-xl p-4 md:p-8 flex flex-col items-center justify-center text-center hover:border-[#CC5833]/50 hover:bg-[#CC5833]/5 transition-all cursor-pointer group mt-auto">
-                          <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-3 group-hover:scale-110 transition-transform">
-                            <ImagePlus className="h-6 w-6 text-gray-400 group-hover:text-[#CC5833]" />
-                          </div>
-                          <p className="text-sm font-medium text-gray-600 font-sans">
-                            Média feltöltése
-                          </p>
-                          <p className="text-xs text-gray-400 mt-1 font-sans">
-                            Húzd ide a képeket vagy kattints (
-                            {10 - images.length} hely)
-                          </p>
-                          <input
-                            type="file"
-                            multiple
-                            accept="image/*"
-                            className="hidden"
-                            onChange={(e) => {
-                              void uploadFiles(e.target.files);
-                              e.currentTarget.value = "";
-                            }}
-                          />
-                        </label>
-                      )}
+                      {images.length < 10 &&
+                        images.reduce((sum, img) => sum + (img.size ?? 0), 0) <
+                          MAX_UPLOAD_TOTAL_BYTES && (
+                          <label className="border-2 border-dashed border-gray-300 rounded-xl p-4 md:p-8 flex flex-col items-center justify-center text-center hover:border-[#CC5833]/50 hover:bg-[#CC5833]/5 transition-all cursor-pointer group mt-auto">
+                            <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm mb-3 group-hover:scale-110 transition-transform">
+                              <ImagePlus className="h-6 w-6 text-gray-400 group-hover:text-[#CC5833]" />
+                            </div>
+                            <p className="text-sm font-medium text-gray-600 font-sans">
+                              Média feltöltése
+                            </p>
+                            <p className="text-xs text-gray-400 mt-1 font-sans">
+                              Húzd ide a képeket vagy kattints (
+                              {10 - images.length} hely)
+                            </p>
+                            <input
+                              type="file"
+                              multiple
+                              accept="image/*"
+                              className="hidden"
+                              onChange={(e) => {
+                                void uploadFiles(e.target.files);
+                                e.currentTarget.value = "";
+                              }}
+                            />
+                          </label>
+                        )}
                       {uploading && (
                         <div className="flex items-center justify-center gap-2 mt-4 text-sm text-gray-500 font-sans">
                           <Loader2 className="h-4 w-4 animate-spin" /> Képek
@@ -1158,7 +1407,10 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                             >
                               <EmojiPicker
                                 onEmojiClick={(emojiData) => {
-                                  if (platform === "instagram") {
+                                  if (
+                                    bothPlatforms ||
+                                    platform === "instagram"
+                                  ) {
                                     setDescription(
                                       (prev) => prev + emojiData.emoji,
                                     );
@@ -1208,7 +1460,11 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                         </p>
                       )}
                       <button
-                        onClick={() => void scheduleRegularPost()}
+                        onClick={() =>
+                          void (bothPlatforms
+                            ? scheduleBothPlatforms()
+                            : scheduleRegularPost())
+                        }
                         disabled={loading || uploading}
                         className="flex-1 md:flex-initial px-4 md:px-6 py-2.5 rounded bg-[#CC5833] text-white text-sm font-bold tracking-wide shadow-glow hover:bg-[#D96B47] transition-colors font-sans disabled:opacity-50 flex items-center justify-center gap-2"
                       >

@@ -109,7 +109,7 @@ export function LoginForm() {
       )}
 
       {success && (
-        <div className="rounded-xl border border-[#2E4036]/20 bg-[#2E4036]/08 px-4 py-3 text-sm text-[#2E4036]">
+        <div className="rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700 font-medium">
           {success}
         </div>
       )}

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://postrocket.app"),
+  metadataBase: new URL("https://postrocket.hu"),
   title: {
     default:
       "PostRocket | Automatizált social media posztolás az AI segítségével",
@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website",
     locale: "hu_HU",
-    url: "https://postrocket.app",
+    url: "https://postrocket.hu",
     title: "PostRocket | Automatizált social media posztolás",
     description:
       "A PostRocket automatikusan készíti és ütemezi az Instagram és Facebook posztjaidat. Több kliens, kevesebb munka.",

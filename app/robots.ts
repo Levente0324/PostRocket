@@ -7,6 +7,6 @@ export default function robots(): MetadataRoute.Robots {
       allow: "/",
       disallow: ["/api/", "/dashboard/"],
     },
-    sitemap: "https://postrocket.app/sitemap.xml",
+    sitemap: "https://postrocket.hu/sitemap.xml",
   };
 }

@@ -32,7 +32,9 @@ export default function PrivacyPolicyPage() {
               1. Adatkezelő
             </h2>
             <p>
+              {/* eslint-disable-next-line react/no-unescaped-entities */}
               A PostRocket (a továbbiakban: „Szolgáltatás") üzemeltetője (a
+              {/* eslint-disable-next-line react/no-unescaped-entities */}
               továbbiakban: „Adatkezelő") felelős a felhasználók személyes
               adatainak kezeléséért. A Szolgáltatás a{" "}
               <strong>postrocket.hu</strong> domain alatt érhető el.
@@ -177,6 +179,7 @@ export default function PrivacyPolicyPage() {
             <ul className="list-disc pl-6 space-y-2 mt-2">
               <li>Hozzáférést kérni a tárolt adataihoz.</li>
               <li>Adatai helyesbítését kérni.</li>
+              {/* eslint-disable-next-line react/no-unescaped-entities */}
               <li>Adatai törlését kérni („elfeledtetéshez való jog").</li>
               <li>Az adatkezelés korlátozását kérni.</li>
               <li>Adathordozhatóságot kérni.</li>

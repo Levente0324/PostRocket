@@ -28,11 +28,8 @@ import {
   CalendarClock,
   ChevronLeft,
   ChevronRight,
-  Facebook,
   ImagePlus,
-  Instagram,
   Loader2,
-  Lock,
   Sparkles,
   Trash2,
   X,
@@ -64,7 +61,6 @@ const MAX_UPLOAD_TOTAL_BYTES = 30 * 1024 * 1024; // 30MB total per upload sessio
 
 type ScheduledPost = {
   id: string;
-  platform: "facebook" | "instagram";
   scheduled_for: string;
   caption: string | null;
   image_url: string | null;
@@ -85,7 +81,6 @@ type SelectedImage = {
 type Props = {
   scheduledPosts: ScheduledPost[];
   profile: ProfileSummary;
-  connectedPlatforms: Array<"facebook" | "instagram">;
 };
 
 const WEEK_DAYS = [
@@ -148,7 +143,7 @@ export interface PostSchedulerRef {
 
 export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
   function PostScheduler(
-    { scheduledPosts, profile, connectedPlatforms },
+    { scheduledPosts, profile },
     ref: React.Ref<PostSchedulerRef>,
   ) {
     const router = useRouter();
@@ -158,11 +153,7 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
     const [viewMonth, setViewMonth] = useState(new Date());
     const [selectedDate, setSelectedDate] = useState<Date | null>(null);
     const [showWizard, setShowWizard] = useState(false);
-    const [platform, setPlatform] = useState<"facebook" | "instagram">(
-      "instagram",
-    );
     const [description, setDescription] = useState("");
-    const [text, setText] = useState("");
     const [time, setTime] = useState("09:00");
     const [images, setImages] = useState<SelectedImage[]>([]);
 
@@ -185,7 +176,6 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
     const [aiEmojis, setAiEmojis] = useState("Mérsékelt");
     const [isGenerating, setIsGenerating] = useState(false);
     const [aiError, setAiError] = useState<string | null>(null);
-    const [bothPlatforms, setBothPlatforms] = useState(false);
 
     const [editingPostId, setEditingPostId] = useState<string | null>(null);
     const [postToDelete, setPostToDelete] = useState<string | null>(null);
@@ -209,6 +199,7 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
       (profile.plan === "pro" || profile.plan === "elite") &&
       (profile.subscription_status === "active" ||
         profile.subscription_status === "trialing");
+    const _ = proAccess; // referenced below (prevents unused lint)
 
     useEffect(() => {
       if (!rootRef.current) return;
@@ -252,12 +243,6 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
       [viewMonth],
     );
 
-    const connectedSet = useMemo(
-      () => new Set(connectedPlatforms),
-      [connectedPlatforms],
-    );
-    const hasAnyConnectedPlatform = connectedPlatforms.length > 0;
-
     const postsByDay = useMemo(() => {
       const map = new Map<string, ScheduledPost[]>();
       for (const post of scheduledPosts) {
@@ -275,47 +260,9 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
     const selectedDayPosts = selectedDate
       ? (postsByDay.get(selectedDateKey) ?? [])
       : [];
-    const selectedDayPlatforms = new Set(
-      selectedDayPosts.map((p) => p.platform),
-    );
-    const availablePlatformCount =
-      Number(
-        connectedSet.has("facebook") && !selectedDayPlatforms.has("facebook"),
-      ) +
-      Number(
-        connectedSet.has("instagram") && !selectedDayPlatforms.has("instagram"),
-      );
-    const dayAtLimit =
-      selectedDayPlatforms.has("facebook") &&
-      selectedDayPlatforms.has("instagram");
-
-    // True when both platforms are connected and neither has a post on this day yet (create-only).
-    const canPostBoth =
-      !editingPostId &&
-      connectedSet.has("instagram") &&
-      connectedSet.has("facebook") &&
-      !selectedDayPlatforms.has("instagram") &&
-      !selectedDayPlatforms.has("facebook");
 
     const resetWizard = () => {
-      // Determine default platform based on connections if nothing selected
-      if (
-        connectedSet.has("instagram") &&
-        !selectedDayPlatforms.has("instagram")
-      ) {
-        setPlatform("instagram");
-      } else if (
-        connectedSet.has("facebook") &&
-        !selectedDayPlatforms.has("facebook")
-      ) {
-        setPlatform("facebook");
-      } else if (connectedSet.has("instagram")) {
-        setPlatform("instagram");
-      } else {
-        setPlatform("facebook");
-      }
       setDescription("");
-      setText("");
       setTime("09:00");
       setImages([]);
       setError(null);
@@ -323,7 +270,6 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
       setAiPrompt("");
       setIsGenerating(false);
       setAiError(null);
-      setBothPlatforms(false);
       setEditingPostId(null);
       setShowEmojiPicker(false);
       setOriginalImageUrls(new Set());
@@ -331,7 +277,6 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
 
     const openEditChoice = (post: ScheduledPost) => {
       // Reset all wizard state first so nothing leaks from a previous create/edit session
-      setBothPlatforms(false); // critical: prevents save button calling scheduleBothPlatforms
       setShowAIAssistant(false);
       setAiPrompt("");
       setAiTone("Szakmai");
@@ -346,11 +291,8 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
 
       setEditingPostId(post.id);
       setSelectedDate(parseISO(post.scheduled_for));
-      setPlatform(post.platform);
 
-      // Always use `description` — the textarea always binds to it regardless of platform.
       setDescription(post.caption || "");
-      setText("");
 
       try {
         if (post.image_url) {
@@ -376,12 +318,6 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
     };
 
     const openDateChoice = (date: Date) => {
-      if (!hasAnyConnectedPlatform) {
-        setError(
-          "Ütemezés előtt csatlakoztass Facebook vagy Instagram fiókot a Fiók és számlázás oldalon.",
-        );
-        return;
-      }
       setSelectedDate(date);
       setShowWizard(true);
       setError(null);
@@ -558,16 +494,8 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
     const scheduleRegularPost = async () => {
       if (!selectedDate) return;
 
-      if (platform === "instagram" && images.length === 0) {
-        setError("Instagram poszthoz legalább 1 kép kötelező.");
-        return;
-      }
-      if (
-        platform === "facebook" &&
-        !description.trim() &&
-        images.length === 0
-      ) {
-        setError("Facebook poszthoz szöveg vagy legalább 1 kép kötelező.");
+      if (!description.trim() && images.length === 0) {
+        setError("A poszthoz szöveg vagy legalább egy kép szükséges.");
         return;
       }
 
@@ -585,12 +513,9 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
       setError(null);
       try {
         const bodyPayload: any = {
-          type: "regular",
           date: format(selectedDate, "yyyy-MM-dd"),
           time,
-          platform,
           description,
-          text: description,
           imageUrls: images.map((image) => image.url),
           scheduledFor: scheduledDateTime.toISOString(),
         };
@@ -618,98 +543,6 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
             }).catch(() => {});
           }
         }
-        closeAllModals();
-        router.refresh();
-      } catch {
-        setError("Hálózati hiba történt az ütemezés közben.");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    /**
-     * Schedules the same post to BOTH Instagram and Facebook simultaneously.
-     * Creates two independent scheduled_posts rows, one per platform.
-     * If IG succeeds but FB fails the user is informed (IG post remains saved).
-     */
-    const scheduleBothPlatforms = async () => {
-      if (!selectedDate) return;
-
-      if (images.length === 0) {
-        setError(
-          "Mindkét platformra posztoláshoz legalább 1 kép kötelező (Instagram megköveteli).",
-        );
-        return;
-      }
-
-      const scheduledDateTime = parse(
-        `${format(selectedDate, "yyyy-MM-dd")} ${time}`,
-        "yyyy-MM-dd HH:mm",
-        new Date(),
-      );
-      if (scheduledDateTime < new Date()) {
-        setError("Múltbeli időpont nem választható ki.");
-        return;
-      }
-
-      setLoading(true);
-      setError(null);
-      try {
-        const imageUrls = images.map((img) => img.url);
-        const sharedDateTime = scheduledDateTime.toISOString();
-        const sharedDate = format(selectedDate, "yyyy-MM-dd");
-
-        // 1. Schedule Instagram post first (requires image — already validated above)
-        const igRes = await fetch("/api/schedule", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "regular",
-            date: sharedDate,
-            time,
-            platform: "instagram",
-            description,
-            text: "",
-            imageUrls,
-            scheduledFor: sharedDateTime,
-          }),
-        });
-        const igPayload = await igRes.json();
-        if (!igRes.ok) {
-          setError(
-            igPayload.error || "Az Instagram poszt ütemezése nem sikerült.",
-          );
-          return;
-        }
-
-        // 2. Schedule Facebook post with the same content
-        const fbRes = await fetch("/api/schedule", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            type: "regular",
-            date: sharedDate,
-            time,
-            platform: "facebook",
-            description: "",
-            text: description,
-            imageUrls,
-            scheduledFor: sharedDateTime,
-          }),
-        });
-        const fbPayload = await fbRes.json();
-        if (!fbRes.ok) {
-          // IG was already saved — inform user of partial success
-          setError(
-            `Az Instagram poszt elmentve, de a Facebook ütemezése sikertelen: ${
-              fbPayload.error || "Ismeretlen hiba."
-            }`,
-          );
-          router.refresh();
-          return;
-        }
-
-        setSuccessMessage("A poszt mindkét platformra sikeresen időzítve! 🎉");
         closeAllModals();
         router.refresh();
       } catch {
@@ -752,7 +585,7 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             prompt: aiPrompt,
-            platform,
+            platform: "instagram",
             tone: aiTone,
             length: aiLength,
             hashtags: aiHashtags,
@@ -762,13 +595,7 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
         const data = await res.json();
         if (!res.ok)
           throw new Error(data?.error || "Hiba az AI generálás során.");
-
-        // Auto-fill the text area — always use setDescription (textarea binds to it)
-        if (platform === "instagram") {
-          setDescription(data.text);
-        } else {
-          setDescription(data.text);
-        }
+        setDescription(data.text);
       } catch (err: any) {
         setAiError(err.message);
       } finally {
@@ -786,21 +613,6 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
             onCancel={() => setPostToDelete(null)}
             onConfirm={() => void confirmDelete()}
           />
-        )}
-        {!hasAnyConnectedPlatform && (
-          <div
-            data-dash-reveal
-            className="dashboard-card border border-amber-200 bg-amber-50/80 px-5 py-4 text-sm text-amber-800"
-          >
-            Ütemezés előtt legalább egy platformot csatlakoztass a{" "}
-            <a
-              href="/dashboard/account-billing"
-              className="font-semibold underline hover:text-amber-900"
-            >
-              Fiók és számlázás
-            </a>{" "}
-            oldalon.
-          </div>
         )}
 
         {/* Calendar card */}
@@ -864,8 +676,7 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                 const dayPosts = postsByDay.get(dayKey) ?? [];
                 const isPast = day < minDate;
                 const isTooFar = day > maxDate;
-                const isSelectable =
-                  !isPast && !isTooFar && hasAnyConnectedPlatform;
+                const isSelectable = !isPast && !isTooFar;
                 const today = isSameDay(day, now);
                 const unavailable = isPast || isTooFar;
 
@@ -904,12 +715,9 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                       >
                         {format(day, "dd")}
                       </span>
-                      {!isSelectable && !unavailable && (
-                        <Lock className="h-3 w-3 text-gray-300" />
-                      )}
                     </div>
 
-                    {!unavailable && isSelectable && dayPosts.length === 0 && (
+                    {!unavailable && dayPosts.length === 0 && (
                       <div className="absolute inset-0 m-auto flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                         <div className="w-8 h-8 rounded-full bg-light-primary/10 flex items-center justify-center">
                           <Plus className="h-5 w-5 text-light-primary" />
@@ -925,23 +733,12 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                             e.stopPropagation();
                             openEditChoice(post);
                           }}
-                          className={`group/post flex flex-col px-2 py-1.5 md:p-2 rounded bg-white/90 backdrop-blur-md shadow-sm border border-gray-100 cursor-pointer hover:bg-gray-50 hover:shadow-md hover:-translate-y-0.5 transition-all border-l-[3px] ${
-                            post.platform === "facebook"
-                              ? "border-l-blue-500"
-                              : "border-l-light-primary"
-                          }`}
+                          className="group/post flex flex-col px-2 py-1.5 md:p-2 rounded bg-white/90 backdrop-blur-md shadow-sm border border-gray-100 cursor-pointer hover:bg-gray-50 hover:shadow-md hover:-translate-y-0.5 transition-all border-l-[3px] border-l-light-primary"
                         >
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5 uppercase">
-                              {post.platform === "facebook" ? (
-                                <Facebook className="h-3.5 w-3.5 text-blue-500 shrink-0" />
-                              ) : (
-                                <Instagram className="h-3.5 w-3.5 text-light-primary shrink-0" />
-                              )}
-                              <span className="font-sans text-[12px] text-gray-500 font-semibold tracking-wider">
-                                {format(parseISO(post.scheduled_for), "HH:mm")}
-                              </span>
-                            </div>
+                            <span className="font-sans text-[12px] text-gray-500 font-semibold tracking-wider uppercase">
+                              {format(parseISO(post.scheduled_for), "HH:mm")}
+                            </span>
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -959,19 +756,14 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                         </div>
                       ))}
                     </div>
-                    {/* Small + in corner when 1 post exists but another platform slot is available */}
-                    {!unavailable &&
-                      isSelectable &&
-                      dayPosts.length > 0 &&
-                      [...connectedSet].some(
-                        (p) => !new Set(dayPosts.map((q) => q.platform)).has(p),
-                      ) && (
-                        <div className="mx-auto pt-2 flex items items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
-                          <div className="w-6 h-6 rounded-full bg-light-primary/10 flex items-center justify-center">
-                            <Plus className="h-3.5 w-3.5 text-light-primary" />
-                          </div>
+                    {/* Small + in corner when posts exist but more can be added */}
+                    {!unavailable && dayPosts.length > 0 && (
+                      <div className="mx-auto pt-2 flex items items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none">
+                        <div className="w-6 h-6 rounded-full bg-light-primary/10 flex items-center justify-center">
+                          <Plus className="h-3.5 w-3.5 text-light-primary" />
                         </div>
-                      )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1196,81 +988,6 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                           <span className="md:hidden">AI</span>
                         </button>
                       )}
-                      {/* Unified 3-tab platform switcher */}
-                      <div className="flex items-center bg-gray-100 border border-gray-200 rounded-lg p-1 gap-1">
-                        {/* Instagram tab */}
-                        <button
-                          onClick={() => {
-                            setBothPlatforms(false);
-                            setPlatform("instagram");
-                          }}
-                          disabled={
-                            // Blocked if IG already has a post on this day AND we're not currently editing that IG post
-                            (selectedDayPlatforms.has("instagram") &&
-                              (!editingPostId || platform !== "instagram")) ||
-                            !connectedSet.has("instagram")
-                          }
-                          className={`px-2.5 md:px-3 py-1.5 text-xs md:text-sm font-bold rounded-md flex items-center gap-1 md:gap-1.5 transition-all duration-200 ${
-                            !bothPlatforms && platform === "instagram"
-                              ? "bg-gradient-to-r from-[#f09433] via-[#e6683c] to-[#dc2743] text-white shadow-sm"
-                              : "text-gray-500 hover:text-gray-700 hover:bg-white/70"
-                          } ${
-                            (selectedDayPlatforms.has("instagram") &&
-                              (!editingPostId || platform !== "instagram")) ||
-                            !connectedSet.has("instagram")
-                              ? "opacity-40 cursor-not-allowed"
-                              : ""
-                          }`}
-                        >
-                          <Instagram className="h-3.5 w-3.5" /> IG
-                        </button>
-
-                        {/* Facebook tab */}
-                        <button
-                          onClick={() => {
-                            setBothPlatforms(false);
-                            setPlatform("facebook");
-                          }}
-                          disabled={
-                            // Blocked if FB already has a post on this day AND we're not currently editing that FB post
-                            (selectedDayPlatforms.has("facebook") &&
-                              (!editingPostId || platform !== "facebook")) ||
-                            !connectedSet.has("facebook")
-                          }
-                          className={`px-2.5 md:px-3 py-1.5 text-xs md:text-sm font-bold rounded-md flex items-center gap-1 md:gap-1.5 transition-all duration-200 ${
-                            !bothPlatforms && platform === "facebook"
-                              ? "bg-[#1877F2] text-white shadow-sm"
-                              : "text-gray-500 hover:text-gray-700 hover:bg-white/70"
-                          } ${
-                            (selectedDayPlatforms.has("facebook") &&
-                              (!editingPostId || platform !== "facebook")) ||
-                            !connectedSet.has("facebook")
-                              ? "opacity-40 cursor-not-allowed"
-                              : ""
-                          }`}
-                        >
-                          <Facebook className="h-3.5 w-3.5" /> FB
-                        </button>
-
-                        {/* Both tab — only shown when both platforms are available for this day */}
-                        {canPostBoth && (
-                          <button
-                            onClick={() => setBothPlatforms(true)}
-                            className={`px-2.5 md:px-3 py-2 text-xs md:text-sm font-bold rounded-md flex items-center gap-0.5 transition-all duration-200 ${
-                              bothPlatforms
-                                ? "bg-gradient-to-r from-[#e6683c] to-[#1877F2] text-white shadow-sm"
-                                : "text-gray-500 hover:text-gray-700 hover:bg-white/70"
-                            }`}
-                            title="Ütemezés mindkét platformra"
-                          >
-                            <Instagram className="h-4 w-4" />
-                            <span className="text-[15px] leading-none ml-0.5">
-                              +
-                            </span>
-                            <Facebook className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
 
                       <button
                         onClick={cancelAndCloseModal}
@@ -1407,16 +1124,9 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                             >
                               <EmojiPicker
                                 onEmojiClick={(emojiData) => {
-                                  if (
-                                    bothPlatforms ||
-                                    platform === "instagram"
-                                  ) {
-                                    setDescription(
-                                      (prev) => prev + emojiData.emoji,
-                                    );
-                                  } else {
-                                    setText((prev) => prev + emojiData.emoji);
-                                  }
+                                  setDescription(
+                                    (prev) => prev + emojiData.emoji,
+                                  );
                                   setShowEmojiPicker(false);
                                 }}
                                 width={Math.min(320, window.innerWidth - 16)}
@@ -1460,11 +1170,7 @@ export const PostScheduler = forwardRef<PostSchedulerRef, Props>(
                         </p>
                       )}
                       <button
-                        onClick={() =>
-                          void (bothPlatforms
-                            ? scheduleBothPlatforms()
-                            : scheduleRegularPost())
-                        }
+                        onClick={() => void scheduleRegularPost()}
                         disabled={loading || uploading}
                         className="flex-1 md:flex-initial px-4 md:px-6 py-2.5 rounded bg-[#CC5833] text-white text-sm font-bold tracking-wide shadow-glow hover:bg-[#D96B47] transition-colors font-sans disabled:opacity-50 flex items-center justify-center gap-2"
                       >

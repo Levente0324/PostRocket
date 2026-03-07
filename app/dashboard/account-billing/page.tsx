@@ -3,7 +3,6 @@ import {
   createStripePortalSession,
   syncStripeCheckoutSession,
 } from "@/app/actions/stripe";
-import { SocialConnections } from "@/components/dashboard/SocialConnections";
 import { UpgradeEliteButton } from "@/components/dashboard/UpgradeEliteButton";
 import { createClient } from "@/lib/supabase/server";
 import {
@@ -44,8 +43,6 @@ export default async function AccountBillingPage({
   const rawSessionId = typeof qp.session_id === "string" ? qp.session_id : null;
   const billingError =
     typeof qp.billing_error === "string" ? qp.billing_error : null;
-  const metaError = typeof qp.meta_error === "string" ? qp.meta_error : null;
-  const metaSuccess = typeof qp.meta === "string" ? qp.meta : null;
   const checkoutCancelled = checkout === "cancelled";
   const upgradeSuccess =
     typeof qp.upgrade === "string" && qp.upgrade === "success";
@@ -92,14 +89,11 @@ export default async function AccountBillingPage({
         limit: 10,
         expand: ["data.items.data.price"],
       });
-      // Pick the first active or trialing subscription (handles test mode trials)
       const sub = subs.data.find(
         (s) => s.status === "active" || s.status === "trialing",
       );
 
       if (sub) {
-        // In Stripe's clover API (2026-01-28), many fields moved from the subscription
-        // level to the subscription item level. Read from both to cover all cases.
         const subItem = sub.items.data[0] as unknown as {
           current_period_end?: number;
           cancel_at?: number;
@@ -114,22 +108,16 @@ export default async function AccountBillingPage({
           (sub as unknown as { cancel_at?: number }).cancel_at ??
           subItem?.cancel_at;
 
-        // cancel_at_period_end may also have moved to the item level in clover API
         const cancelAtPeriodEnd =
           sub.cancel_at_period_end || subItem?.cancel_at_period_end || false;
 
-        // Treat as cancellation if cancel_at_period_end is set OR if Stripe set a
-        // specific cancel_at timestamp (the portal sets cancel_at directly instead
-        // of cancel_at_period_end when scheduling a cancellation at period end).
         if (cancelAtPeriodEnd || cancelAt) {
-          // Subscription is set to cancel — no future billing
           const effectiveCancelAt = cancelAt ?? periodEnd;
           if (effectiveCancelAt)
             cancelAtDate = new Date(effectiveCancelAt * 1000);
           isDowngrading = true;
           nextBillingAmountHuf = 0;
         } else {
-          // Check for a subscription schedule (e.g. portal-initiated downgrade Elite→Pro)
           const scheduleRef = (
             sub as unknown as { schedule?: string | { id: string } | null }
           ).schedule;
@@ -143,7 +131,6 @@ export default async function AccountBillingPage({
               const schedule =
                 await stripe.subscriptionSchedules.retrieve(scheduleId);
               const nowSec = Math.floor(Date.now() / 1000);
-              // Phases are ordered; find the next one that starts in the future
               const futurePhase = (
                 schedule.phases as Array<{
                   start_date: number;
@@ -154,19 +141,13 @@ export default async function AccountBillingPage({
                 .sort((a, b) => a.start_date - b.start_date)
                 .find((p) => p.start_date > nowSec);
 
-              // If end_behavior is "cancel", the subscription will terminate at the end
-              // of the schedule — regardless of any intermediate phases (e.g. Elite→Pro→cancel).
-              // "release" means the sub continues with the last phase price (e.g. Elite→Pro downgrade).
               const scheduleCancels = schedule.end_behavior === "cancel";
 
               if (scheduleCancels) {
-                // Subscription will terminate — treat as cancellation
                 isDowngrading = true;
                 nextBillingAmountHuf = 0;
-                // Use the period end date already set above as the effective end date
                 if (nextBillingDate) cancelAtDate = nextBillingDate;
               } else if (futurePhase?.items?.length) {
-                // Retrieve the price for the scheduled future plan
                 const futurePriceId = futurePhase.items[0].price;
                 const futurePrice = await stripe.prices.retrieve(futurePriceId);
                 nextBillingAmountHuf =
@@ -174,23 +155,18 @@ export default async function AccountBillingPage({
                     ? Math.round(futurePrice.unit_amount / 100)
                     : 0;
               } else {
-                // Schedule exists but no clear future phase — fall back to current price
                 const price = sub.items.data[0]?.price;
                 if (price?.unit_amount != null)
                   nextBillingAmountHuf = Math.round(price.unit_amount / 100);
               }
             } catch {
-              // Schedule retrieval failed — fall back to current price
               const price = sub.items.data[0]?.price;
               if (price?.unit_amount != null)
                 nextBillingAmountHuf = Math.round(price.unit_amount / 100);
             }
           } else {
-            // No schedule — current price is the next billing price
             const price = sub.items.data[0]?.price;
             if (price?.unit_amount != null) {
-              // unit_amount is in fillérs (1/100 HUF) even though HUF is nominally zero-decimal,
-              // because the Stripe price was created with 2 implied decimal places.
               nextBillingAmountHuf = Math.round(price.unit_amount / 100);
             }
           }
@@ -200,14 +176,6 @@ export default async function AccountBillingPage({
       console.error("[billing] Stripe fetch error:", err);
     }
   }
-
-  const { data: accounts } = await supabase
-    .from("social_accounts")
-    .select("provider, account_name, expires_at")
-    .eq("user_id", user.id);
-
-  const facebook = accounts?.find((a) => a.provider === "facebook") || null;
-  const instagram = accounts?.find((a) => a.provider === "instagram") || null;
 
   const isPro = hasProAccess(profile);
   const isElite = hasEliteAccess(profile);
@@ -280,25 +248,6 @@ export default async function AccountBillingPage({
               </p>
             </div>
           )}
-          {metaError && (
-            <div className="bg-white border border-red-200 rounded-xl shadow-sm px-6 py-4 text-sm text-red-600">
-              Hiba a Meta fiók csatlakoztatása közben:{" "}
-              {metaError === "oauth_state"
-                ? "Érvénytelen biztonsági kulcs (lejárt munkamenet)."
-                : metaError === "no_pages"
-                  ? "Nem található összekapcsolható Facebook oldal."
-                  : metaError === "no_instagram_business"
-                    ? "Nem található Instagram Üzleti (Business) vagy Alkotói (Creator) fiók a kiválasztott Facebook oldalhoz."
-                    : metaError === "oauth_failed"
-                      ? "A csatlakozás sikertelen volt (lehet, hogy hiányzik a megfelelő adatbázis oszlop, futtasd az SQL migrációt)."
-                      : "Ismeretlen hiba történt."}
-            </div>
-          )}
-          {metaSuccess === "connected" && (
-            <div className="bg-white border border-green-200 rounded-xl shadow-sm px-6 py-4 text-sm text-green-600">
-              🎉 Sikeresen összekapcsoltad a közösségi fiókodat!
-            </div>
-          )}
 
           {/* Current plan + Account */}
           <div className="bg-white border border-light-clinical-gray rounded-xl shadow-sm p-6 md:p-8">
@@ -331,7 +280,7 @@ export default async function AccountBillingPage({
                   </li>
                   <li className="flex items-center gap-2 text-sm text-gray-600">
                     <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-light-primary" />
-                    Facebook + Instagram
+                    Email értesítés a tervezett posztokról
                   </li>
                   {isPro && (
                     <li className="flex items-center gap-2 text-sm text-gray-600">
@@ -405,20 +354,6 @@ export default async function AccountBillingPage({
             )}
           </div>
 
-          {/* Social accounts */}
-          <div className="bg-white border border-light-clinical-gray rounded-xl shadow-sm p-6 md:p-8">
-            <h2 className="mb-2 text-xl font-sans font-semibold text-gray-900">
-              Kapcsolt közösségi fiókok
-            </h2>
-            <p className="mb-6 text-sm text-gray-500">
-              Csatlakoztasd Facebook vagy Instagram fiókodat az automatikus
-              posztoláshoz.
-            </p>
-            <div className="p-1">
-              <SocialConnections facebook={facebook} instagram={instagram} />
-            </div>
-          </div>
-
           {/* Pricing upgrade cards — shown when NOT on Elite */}
           {!isElite && (
             <div className="bg-white border border-light-clinical-gray rounded-xl shadow-sm p-6 md:p-8">
@@ -464,8 +399,8 @@ export default async function AccountBillingPage({
                     <ul className="mb-6 space-y-2.5">
                       {[
                         "20 aktív időzített poszt",
-                        "Facebook + Instagram",
                         "AI szövegírás",
+                        "Email értesítő a tervezett posztokhoz",
                       ].map((f) => (
                         <li
                           key={f}
@@ -517,9 +452,9 @@ export default async function AccountBillingPage({
                     <ul className="mb-6 space-y-2.5">
                       {[
                         "50 aktív időzített poszt",
-                        "Facebook + Instagram",
                         "KORLÁTLAN AI szövegírás",
                         "AI képgenerálás (hamarosan)",
+                        "Email értesítő a tervezett posztokhoz",
                         "Elsőbbségi támogatás",
                       ].map((f) => (
                         <li

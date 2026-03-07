@@ -1,29 +1,19 @@
 import { createClient } from "@/lib/supabase/server";
-import { getPostLimit, hasPaidAccess } from "@/lib/subscription";
+import { getPostLimit } from "@/lib/subscription";
 import { addDays, endOfDay, isValid, parse, startOfDay } from "date-fns";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-const MAX_CAPTION_LENGTH = 64_000; // slightly above Meta's 63,206 char Facebook limit
+const MAX_CAPTION_LENGTH = 64_000;
 
 const scheduleSchema = z.object({
   date: z.string().min(1),
   time: z.string().min(1),
-  platform: z.enum(["instagram", "facebook"]),
   description: z.string().max(MAX_CAPTION_LENGTH).optional(),
-  text: z.string().max(MAX_CAPTION_LENGTH).optional(),
   imageUrls: z.array(z.string().url()).max(10).default([]),
-  type: z.enum(["regular", "ai"]),
   editId: z.string().uuid().optional(),
   scheduledFor: z.string().datetime().optional(),
 });
-
-function getDateRange(date: Date) {
-  return {
-    start: startOfDay(date),
-    end: endOfDay(date),
-  };
-}
 
 export async function POST(req: Request) {
   const supabase = await createClient();
@@ -109,7 +99,7 @@ export async function POST(req: Request) {
     );
   }
 
-  // Prevent scheduling in the past on _today_ (minDate only blocks past days)
+  // Prevent scheduling in the past on _today_
   if (selectedDate < now) {
     return NextResponse.json(
       { error: "Múltbeli időpontra nem ütemezhetsz posztot." },
@@ -130,49 +120,19 @@ export async function POST(req: Request) {
     );
   }
 
-  const paidAccess = hasPaidAccess(profile);
-
-  const { data: connectedAccount } = await supabase
-    .from("social_accounts")
-    .select("id")
-    .eq("user_id", user.id)
-    .eq("provider", input.platform)
-    .maybeSingle();
-
-  if (!connectedAccount) {
-    return NextResponse.json(
-      {
-        error: `Csatlakoztasd a(z) ${input.platform} fiókodat mielőtt ${input.platform} posztot ütemeznél.`,
-      },
-      { status: 403 },
-    );
-  }
-
-  if (input.type === "ai") {
-    if (!paidAccess) {
-      return NextResponse.json(
-        {
-          error:
-            "Az AI poszt ütemezés csak Pro és Elite csomagokban érhető el.",
-        },
-        { status: 403 },
-      );
-    }
-
-    return NextResponse.json(
-      { error: "Az AI poszt ütemezés még nem elérhető." },
-      { status: 501 },
-    );
-  }
-
   const imageCount = input.imageUrls.length;
-  const text = (input.text ?? "").trim();
-  const description = (input.description ?? "").trim();
+  const caption = (input.description ?? "").trim();
+
+  // Require at least caption text or one image
+  if (!caption && imageCount === 0) {
+    return NextResponse.json(
+      { error: "A poszthoz szöveg vagy legalább egy kép szükséges." },
+      { status: 400 },
+    );
+  }
 
   // Validate that all image URLs belong to THIS project's storage and the
-  // current user's folder. Comparing against the exact project origin prevents
-  // an attacker from referencing images hosted on a different Supabase project
-  // that happens to use routing paths containing the victim's user ID.
+  // current user's folder (SSRF prevention).
   const supabaseOrigin = (() => {
     try {
       return new URL(process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").origin;
@@ -182,12 +142,12 @@ export async function POST(req: Request) {
   })();
   for (const imgUrl of input.imageUrls) {
     try {
-      const parsed = new URL(imgUrl);
+      const parsedUrl = new URL(imgUrl);
       const expectedPrefix = `/storage/v1/object/public/post-media/${user.id}/`;
       if (
         !supabaseOrigin ||
-        parsed.origin !== supabaseOrigin ||
-        !parsed.pathname.startsWith(expectedPrefix)
+        parsedUrl.origin !== supabaseOrigin ||
+        !parsedUrl.pathname.startsWith(expectedPrefix)
       ) {
         return NextResponse.json(
           { error: "Érvénytelen képfájl hivatkozás." },
@@ -197,27 +157,6 @@ export async function POST(req: Request) {
     } catch {
       return NextResponse.json(
         { error: "Érvénytelen képfájl URL." },
-        { status: 400 },
-      );
-    }
-  }
-
-  if (input.platform === "instagram") {
-    if (imageCount === 0) {
-      return NextResponse.json(
-        { error: "Az Instagram posztokhoz legalább egy kép szükséges." },
-        { status: 400 },
-      );
-    }
-  }
-
-  if (input.platform === "facebook") {
-    if (!text && imageCount === 0) {
-      return NextResponse.json(
-        {
-          error:
-            "A Facebook posztokhoz szöveg vagy legalább egy kép szükséges.",
-        },
         { status: 400 },
       );
     }
@@ -245,41 +184,6 @@ export async function POST(req: Request) {
       { status: 403 },
     );
   }
-
-  const day = getDateRange(selectedDate);
-
-  let query = supabase
-    .from("scheduled_posts")
-    .select("id, posts!inner(user_id)", { count: "exact", head: true })
-    .eq("posts.user_id", user.id)
-    .eq("platform", input.platform)
-    .eq("status", "scheduled")
-    .gte("scheduled_for", day.start.toISOString())
-    .lte("scheduled_for", day.end.toISOString());
-
-  if (input.editId) {
-    query = query.neq("id", input.editId);
-  }
-
-  const { count: dayPlatformCount, error: duplicateError } = await query;
-
-  if (duplicateError) {
-    return NextResponse.json(
-      { error: "Nem sikerült ellenőrizni ezt a napot." },
-      { status: 500 },
-    );
-  }
-
-  if ((dayPlatformCount ?? 0) > 0) {
-    return NextResponse.json(
-      {
-        error: `Erre a napra már van ütemezve egy ${input.platform} posztod.`,
-      },
-      { status: 409 },
-    );
-  }
-
-  const caption = input.platform === "instagram" ? description : text;
 
   if (input.editId) {
     const { data: existing, error: err } = await supabase
@@ -315,11 +219,10 @@ export async function POST(req: Request) {
     const { data: updatedSchedule, error: updateErr } = await supabase
       .from("scheduled_posts")
       .update({
-        platform: input.platform,
         scheduled_for: selectedDate.toISOString(),
       })
       .eq("id", input.editId)
-      .select("id, platform, scheduled_for")
+      .select("id, scheduled_for")
       .single();
 
     if (updateErr) {
@@ -354,11 +257,10 @@ export async function POST(req: Request) {
     .from("scheduled_posts")
     .insert({
       post_id: post.id,
-      platform: input.platform,
       scheduled_for: selectedDate.toISOString(),
       status: "scheduled",
     })
-    .select("id, platform, scheduled_for")
+    .select("id, scheduled_for")
     .single();
 
   if (scheduleError || !schedule) {

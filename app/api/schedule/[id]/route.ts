@@ -8,6 +8,32 @@ function isValidUUID(value: string): boolean {
   );
 }
 
+function parseStoredImages(imageUrl: string | null): string[] {
+  if (!imageUrl) return [];
+  const trimmed = imageUrl.trim();
+  if (!trimmed) return [];
+  if (trimmed.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(trimmed);
+      if (Array.isArray(parsed)) {
+        return parsed.filter(
+          (item): item is string => typeof item === "string" && !!item,
+        );
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  }
+  if (trimmed.includes(",")) {
+    return trimmed
+      .split(",")
+      .map((p) => p.trim())
+      .filter(Boolean);
+  }
+  return [trimmed];
+}
+
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -61,20 +87,16 @@ export async function DELETE(
 
   // Clean up uploaded images from storage (non-fatal — post is already deleted).
   // Reference-count guard: only delete a storage file if no other post owned by
-  // this user still references it. This protects the sibling post in IG+FB pairs
-  // (both posts share the same image URLs; deleting one should never orphan the other).
+  // this user still references it.
   const imageUrl = (scheduledPost.posts as any)?.image_url;
   if (imageUrl) {
     try {
-      const { parseStoredImages } = await import("@/lib/social-account");
       const urls = parseStoredImages(imageUrl);
 
       const pathsToDelete: string[] = [];
 
       for (const url of urls) {
         // Check if any other post by this user still references this URL.
-        // The post we just deleted is already gone from the DB at this point.
-        // Escape SQL LIKE wildcards in the URL so underscores/percents are literals.
         const escapedUrl = url.replace(/%/g, "\\%").replace(/_/g, "\\_");
         const { count: refCount } = await supabase
           .from("posts")
@@ -83,7 +105,6 @@ export async function DELETE(
           .like("image_url", `%${escapedUrl}%`);
 
         if ((refCount ?? 0) > 0) {
-          // Still referenced by another post (e.g. the IG/FB sibling) — skip.
           continue;
         }
 

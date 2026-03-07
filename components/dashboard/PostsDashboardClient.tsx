@@ -6,8 +6,10 @@ import { usePostDashboard } from "./PostDashboardContext";
 export function PostsDashboardClient({
   scheduledPosts,
   profile,
-  connectedPlatforms,
-}: any) {
+}: {
+  scheduledPosts: any[];
+  profile: any;
+}) {
   const { schedulerRef } = usePostDashboard();
 
   return (
@@ -17,7 +19,6 @@ export function PostsDashboardClient({
           ref={schedulerRef}
           scheduledPosts={scheduledPosts}
           profile={profile}
-          connectedPlatforms={connectedPlatforms}
         />
       </div>
     </div>
